@@ -1,0 +1,9 @@
+[package]
+name = "rays-rs"
+version = "0.1.0"
+authors = ["Julian Goldsmith <julian@juliangoldsmith.com>"]
+edition = "2018"
+
+[dependencies]
+cgmath = "0.17"
+png = "0.14"
