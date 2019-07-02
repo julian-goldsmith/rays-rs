@@ -19,6 +19,12 @@ pub struct Ray {
     pub direction: Vector3<f32>,
 }
 
+impl Ray {
+    pub fn point_at(&self, dist: f32) -> Vector3<f32> {
+        self.origin + self.direction * dist
+    }
+}
+
 // P(t) * P(t) = radius ^ 2 -- in local coordinates
 // We want to find t
 // dot(P - center, P - center) = radius ^ 2
@@ -29,14 +35,18 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    pub fn hit(&self, r: &Ray) -> bool {
+    pub fn hit(&self, r: &Ray) -> Option<f32> {
         let r_origin_local = r.origin - self.center;
         let a = r.direction.dot(r.direction);
         let b = 2.0 * r_origin_local.dot(r.direction);
         let c = r_origin_local.dot(r_origin_local) - self.radius * self.radius;
         let discriminant = b * b - 4.0 * a * c;
 
-        discriminant > 0.0
+        if discriminant > 0.0 {
+            Some((-b - discriminant.sqrt()) / (2.0 * a))
+        } else {
+            None
+        }
     }
 }
 
@@ -69,10 +79,12 @@ fn render(width: usize, height: usize) -> Vec<u8> {
                 direction: lower_left_corner + uv.extend(0.0),
             };
 
-            let color = 255.0 * if s.hit(&r) {
-                Vector3::new(1.0, 0.0, 0.0)
-            } else {
-                color(&r)
+            let color = 255.0 * match s.hit(&r) {
+                Some(dist) => {
+                    let normal = (r.point_at(dist) - s.center).normalize();
+                    0.5 * (normal + Vector3::new(1.0, 1.0, 1.0))
+                },
+                None => color(&r),
             };
 
             pixels.push(color.x as u8);
