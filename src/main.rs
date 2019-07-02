@@ -5,8 +5,12 @@ use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
-use cgmath::{Vector2, Vector3};
+use cgmath::{Matrix2, Vector2, Vector3};
 use png::HasParameters;
+
+// https://nelari.us/post/raytracer_with_rust_and_zig/
+// https://www.cl.cam.ac.uk/teaching/1999/AGraphHCI/SMAG/node2.html
+// http://www.realtimerendering.com/raytracing/Ray%20Tracing%20in%20a%20Weekend.pdf
 
 // P(t) = E + tD, t >= 0
 #[derive(Copy, Clone)]
@@ -26,13 +30,6 @@ pub struct Sphere {
 
 impl Sphere {
     pub fn hit(&self, r: &Ray) -> bool {
-        // t^2(D * D) + t(2E * D) + (E * E - 1) = 0
-        //
-        //
-        // https://nelari.us/post/raytracer_with_rust_and_zig/
-        // https://www.cl.cam.ac.uk/teaching/1999/AGraphHCI/SMAG/node2.html
-        // http://www.realtimerendering.com/raytracing/Ray%20Tracing%20in%20a%20Weekend.pdf
-
         let r_origin_local = r.origin - self.center;
         let a = r.direction.dot(r.direction);
         let b = 2.0 * r_origin_local.dot(r.direction);
@@ -43,47 +40,44 @@ impl Sphere {
     }
 }
 
-pub struct World {
-    spheres: Vec<Sphere>,
-}
-
 fn color(r: &Ray) -> Vector3<f32> {
     let unit_direction = r.direction.normalize();
     let t = 0.5 * (unit_direction.y + 1.0);
-    ((1.0 - t) * Vector3::new(1.0, 1.0, 1.0)) + (t * Vector3::new(0.5, 0.7, 1.0))
+    (1.0 - t) * Vector3::new(1.0, 1.0, 1.0) + t * Vector3::new(0.5, 0.7, 1.0)
 }
 
 fn render(width: usize, height: usize) -> Vec<u8> {
     let mut pixels = Vec::new();
-    let aspect = (width as f32) / (height as f32);
-    let horizontal = Vector3::new(4.0, 0.0, 0.0);
-    let vertical = Vector3::new(0.0, 4.0 * aspect, 0.0);
-    let lower_left_corner = Vector3::new(horizontal.x / 2.0 - horizontal.x, -vertical.y / 2.0, -1.0);   // FIXME: Go from top left.
-    let origin = Vector3::new(0.0, 0.0, 0.0);
+    let aspect = (height as f32) / (width as f32);
+    let origin = Vector3::zero();
+    let screen_space = Vector2::new(4.0, 4.0 * aspect);
+    let lower_left_corner = (screen_space / -2.0).extend(-1.0);     // FIXME: Go from top left.
 
     let s = Sphere {
         center: Vector3::new(0.0, 0.0, -1.0),
         radius: 0.5,
     };
 
+    let screen_space_transform = Matrix2::new(screen_space.x / (width as f32), 0.0, 0.0, screen_space.y / (height as f32));
+
     for y in 0..height {
         for x in 0..width {
-            let u = (x as f32) / (width as f32);
-            let v = (y as f32) / (height as f32);
+            let uv = screen_space_transform * Vector2::new(x as f32, y as f32);
+
             let r = Ray {
                 origin,
-                direction: lower_left_corner + (horizontal * u) + (vertical * v),
+                direction: lower_left_corner + uv.extend(0.0),
             };
 
-            let color = if s.hit(&r) {
+            let color = 255.0 * if s.hit(&r) {
                 Vector3::new(1.0, 0.0, 0.0)
             } else {
                 color(&r)
             };
 
-            pixels.push((color.x * 255.0) as u8);
-            pixels.push((color.y * 255.0) as u8);
-            pixels.push((color.z * 255.0) as u8);
+            pixels.push(color.x as u8);
+            pixels.push(color.y as u8);
+            pixels.push(color.z as u8);
         };
     };
 
@@ -102,6 +96,11 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 }
 
 fn main() {
-    let data = render(900, 900);
-    write_png(&Path::new("/var/www/rays.png"), &data, 900, 900);
+    let width = 900;
+    let height = 700;
+    let path = Path::new("/var/www/rays.png");
+
+    let data = render(width, height);
+
+    write_png(&path, &data, width, height);
 }
