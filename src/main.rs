@@ -44,7 +44,7 @@ pub struct Sphere {
 
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let r_proj = self.center.to_homogeneous().truncate().project_on(r.origin.to_homogeneous().truncate() + r.direction.truncate()).extend(1.0);
+        let r_proj = self.center.to_vec().project_on(r.origin.to_vec() + r.direction.truncate()).extend(1.0);
         let discriminant = r_proj.magnitude2() + self.radius * self.radius - self.center.distance2(r.origin);
 
         if discriminant > 0.0 {
@@ -73,7 +73,7 @@ impl World {
         let mut pixels = Vec::new();
         let aspect = (height as f32) / (width as f32);
         let screen_space = Vector2::new(4.0, 4.0 * aspect);
-        let lower_left_corner = (screen_space / -2.0).extend(-1.0);
+        let lower_left_corner = (screen_space / -2.0);
 
         let screen_space_transform = Matrix2::new(
             screen_space.x / (width as f32), 0.0,
@@ -85,7 +85,7 @@ impl World {
 
                 let r = Ray {
                     origin: Point3::new(0.0, 0.0, 0.0),
-                    direction: (lower_left_corner + uv.extend(0.0)).normalize().extend(1.0),
+                    direction: (lower_left_corner + uv).extend(-1.0).extend(1.0).normalize(),
                 };
 
                 let curr_ixn = self.spheres.iter().
