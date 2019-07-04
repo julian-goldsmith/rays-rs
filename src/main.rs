@@ -5,7 +5,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
-use cgmath::{Matrix2, Point3, Vector2, Vector3};
+use cgmath::{Matrix2, Point3, Vector2, Vector3, Vector4};
 use png::HasParameters;
 
 // https://nelari.us/post/raytracer_with_rust_and_zig/
@@ -16,12 +16,12 @@ use png::HasParameters;
 #[derive(Copy, Clone)]
 pub struct Ray {
     pub origin: Point3<f32>,
-    pub direction: Vector3<f32>,
+    pub direction: Vector4<f32>,
 }
 
 impl Ray {
     pub fn point_at_distance(&self, dist: f32) -> Point3<f32> {
-        self.origin + self.direction * dist
+        self.origin + self.direction.truncate() * dist
     }
 }
 
@@ -29,7 +29,7 @@ impl Ray {
 pub struct Intersection {
     pub pos: Point3<f32>,
     pub dist: f32,
-    pub normal: Vector3<f32>,
+    pub normal: Vector4<f32>,
 }
 
 pub trait Intersect {
@@ -44,7 +44,7 @@ pub struct Sphere {
 
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let r_proj = self.center.to_homogeneous().truncate().project_on(r.origin.to_homogeneous().truncate() + r.direction);
+        let r_proj = self.center.to_homogeneous().truncate().project_on(r.origin.to_homogeneous().truncate() + r.direction.truncate()).extend(1.0);
         let discriminant = r_proj.magnitude2() + self.radius * self.radius - self.center.distance2(r.origin);
 
         if discriminant > 0.0 {
@@ -54,7 +54,7 @@ impl Intersect for Sphere {
             let intersection = Intersection {
                 pos,
                 dist,
-                normal: (pos - self.center).normalize(),
+                normal: (pos - self.center).normalize().extend(1.0),
             };
 
             Some(intersection)
@@ -85,7 +85,7 @@ impl World {
 
                 let r = Ray {
                     origin: Point3::new(0.0, 0.0, 0.0),
-                    direction: (lower_left_corner + uv.extend(0.0)).normalize(),
+                    direction: (lower_left_corner + uv.extend(0.0)).normalize().extend(1.0),
                 };
 
                 let curr_ixn = self.spheres.iter().
@@ -94,7 +94,7 @@ impl World {
 
                 let color = 255.0 * match curr_ixn {
                     Some(ixn) => {
-                        0.5 * (ixn.normal + Vector3::new(1.0, 1.0, 1.0))
+                        0.5 * (ixn.normal.truncate() + Vector3::new(1.0, 1.0, 1.0))
                     },
                     None => Vector3::new(0.1, 0.4, 0.1),
                 };
@@ -121,8 +121,8 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 }
 
 fn main() {
-    let width = 1920;
-    let height = 1080;
+    let width = 900;
+    let height = 900;
     let path = Path::new("/var/www/rays.png");
 
     let world = World {
