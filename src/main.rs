@@ -50,8 +50,6 @@ impl Intersect for Sphere {
         if discriminant > 0.0 {
             let dist = r_proj.magnitude() - discriminant.sqrt();
             let pos = r.point_at_distance(dist);
-
-            println!("{:?} {:?}", pos, r_proj);
             
             let intersection = Intersection {
                 pos,
@@ -75,9 +73,8 @@ impl World {
         let mut pixels = Vec::new();
         let aspect = (height as f32) / (width as f32);
         let screen_space = Vector2::new(4.0, 4.0 * aspect);
-        let lower_left_corner = (screen_space / -2.0).extend(-1.0);     // FIXME: Go from top left.
+        let lower_left_corner = (screen_space / -2.0).extend(-1.0);
 
-        // FIXME: ElementWise
         let screen_space_transform = Matrix2::new(
             screen_space.x / (width as f32), 0.0,
             0.0, screen_space.y / (height as f32));
@@ -92,9 +89,7 @@ impl World {
                 };
 
                 let curr_ixn = self.spheres.iter().
-                    map(|s| s.intersect(&r)).
-                    filter(|ixn| ixn.is_some()).
-                    map(|ixn| ixn.unwrap()).
+                    filter_map(|s| s.intersect(&r)).
                     min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
 
                 let color = 255.0 * match curr_ixn {
@@ -126,8 +121,8 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 }
 
 fn main() {
-    let width = 100;
-    let height = 100;
+    let width = 1920;
+    let height = 1080;
     let path = Path::new("/var/www/rays.png");
 
     let world = World {
