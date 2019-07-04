@@ -44,13 +44,13 @@ pub struct Sphere {
 
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let r_relative_to_self = r.origin - self.center;
-        let b = r_relative_to_self.dot(r.direction);
-        let c = (r_relative_to_self.magnitude2() - self.radius * self.radius);
-        let discriminant = b * b - c;
+        let r_proj = r.origin + r.direction;
+        let r_relative_to_self = self.center - r.origin;
+        let b = r_proj.dot(self.center);
+        let discriminant = b * b + self.radius * self.radius - r_relative_to_self.magnitude2();
 
         if discriminant > 0.0 {
-            let dist = (-b - discriminant.sqrt());
+            let dist = b - discriminant.sqrt();
             let pos = r.point_at_distance(dist);
             let intersection = Intersection {
                 pos,
