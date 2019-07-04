@@ -44,24 +44,18 @@ pub struct Sphere {
 
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let r_origin_local = r.origin - self.center;
-        let a = r.direction.dot(r.direction);
-        let b = 2.0 * r_origin_local.dot(r.direction);
-        let c = r_origin_local.dot(r_origin_local) - self.radius * self.radius;
-        let discriminant = b * b - 4.0 * a * c;
+        let r_relative_to_self = r.origin - self.center;
+        let b = r_relative_to_self.dot(r.direction);
+        let c = (r_relative_to_self.magnitude2() - self.radius * self.radius);
+        let discriminant = b * b - c;
 
         if discriminant > 0.0 {
-            let dist = if a < 0.0 {
-                -b + discriminant.sqrt()
-            } else {
-                -b - discriminant.sqrt()
-            } / (2.0 * a);
-
+            let dist = (-b - discriminant.sqrt());
             let pos = r.point_at_distance(dist);
             let intersection = Intersection {
                 pos,
                 dist,
-                normal: (pos - self.center) / self.radius,
+                normal: (pos - self.center).normalize(),
             };
 
             Some(intersection)
@@ -79,10 +73,10 @@ impl World {
     fn render(&self, width: usize, height: usize) -> Vec<u8> {
         let mut pixels = Vec::new();
         let aspect = (height as f32) / (width as f32);
-        let origin = Vector3::zero();
         let screen_space = Vector2::new(4.0, 4.0 * aspect);
         let lower_left_corner = (screen_space / -2.0).extend(-1.0);     // FIXME: Go from top left.
 
+        // FIXME: ElementWise
         let screen_space_transform = Matrix2::new(
             screen_space.x / (width as f32), 0.0,
             0.0, screen_space.y / (height as f32));
@@ -92,8 +86,8 @@ impl World {
                 let uv = screen_space_transform * Vector2::new(x as f32, y as f32);
 
                 let r = Ray {
-                    origin,
-                    direction: lower_left_corner + uv.extend(0.0),
+                    origin: Vector3::zero(),
+                    direction: (lower_left_corner + uv.extend(0.0)).normalize(),
                 };
 
                 let curr_ixn = self.spheres.iter().
