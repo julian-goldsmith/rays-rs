@@ -5,7 +5,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
-use cgmath::{Matrix2, Vector2, Vector3};
+use cgmath::{Matrix2, Point3, Vector2, Vector3};
 use png::HasParameters;
 
 // https://nelari.us/post/raytracer_with_rust_and_zig/
@@ -15,19 +15,19 @@ use png::HasParameters;
 // P(t) = E + tD, t >= 0
 #[derive(Copy, Clone)]
 pub struct Ray {
-    pub origin: Vector3<f32>,
+    pub origin: Point3<f32>,
     pub direction: Vector3<f32>,
 }
 
 impl Ray {
-    pub fn point_at_distance(&self, dist: f32) -> Vector3<f32> {
+    pub fn point_at_distance(&self, dist: f32) -> Point3<f32> {
         self.origin + self.direction * dist
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct Intersection {
-    pub pos: Vector3<f32>,
+    pub pos: Point3<f32>,
     pub dist: f32,
     pub normal: Vector3<f32>,
 }
@@ -38,13 +38,13 @@ pub trait Intersect {
 
 #[derive(Copy, Clone)]
 pub struct Sphere {
-    pub center: Vector3<f32>,
+    pub center: Point3<f32>,
     pub radius: f32,
 }
 
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let r_proj = self.center.project_on(r.origin + r.direction);
+        let r_proj = self.center.to_homogeneous().truncate().project_on(r.origin.to_homogeneous().truncate() + r.direction);
         let discriminant = r_proj.magnitude2() + self.radius * self.radius - self.center.distance2(r.origin);
 
         if discriminant > 0.0 {
@@ -84,7 +84,7 @@ impl World {
                 let uv = screen_space_transform * Vector2::new(x as f32, y as f32);
 
                 let r = Ray {
-                    origin: Vector3::zero(),
+                    origin: Point3::new(0.0, 0.0, 0.0),
                     direction: (lower_left_corner + uv.extend(0.0)).normalize(),
                 };
 
@@ -128,15 +128,15 @@ fn main() {
     let world = World {
         spheres: vec![
             Sphere {
-                center: Vector3::new(0.0, 0.0, -2.0),
+                center: Point3::new(0.0, 0.0, -2.0),
                 radius: 0.5,
             },
             Sphere {
-                center: Vector3::new(1.0, 0.0, -1.5),
+                center: Point3::new(1.0, 0.0, -1.5),
                 radius: 0.5,
             },
             Sphere {
-                center: Vector3::new(-1.0, 0.0, -1.5),
+                center: Point3::new(-1.0, 0.0, -1.5),
                 radius: 0.5,
             },
         ],
