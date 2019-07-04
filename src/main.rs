@@ -44,14 +44,15 @@ pub struct Sphere {
 
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let r_proj = r.origin + r.direction;
-        let r_relative_to_self = self.center - r.origin;
-        let b = r_proj.dot(self.center);
-        let discriminant = b * b + self.radius * self.radius - r_relative_to_self.magnitude2();
+        let r_proj = self.center.project_on(r.origin + r.direction);
+        let discriminant = r_proj.magnitude2() + self.radius * self.radius - self.center.distance2(r.origin);
 
         if discriminant > 0.0 {
-            let dist = b - discriminant.sqrt();
+            let dist = r_proj.magnitude() - discriminant.sqrt();
             let pos = r.point_at_distance(dist);
+
+            println!("{:?} {:?}", pos, r_proj);
+            
             let intersection = Intersection {
                 pos,
                 dist,
@@ -125,8 +126,8 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 }
 
 fn main() {
-    let width = 900;
-    let height = 700;
+    let width = 100;
+    let height = 100;
     let path = Path::new("/var/www/rays.png");
 
     let world = World {
