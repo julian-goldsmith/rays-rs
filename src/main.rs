@@ -1,12 +1,14 @@
 extern crate cgmath;
 extern crate png;
+extern crate rand;
 
 use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
-use cgmath::{Matrix2, Point3, Vector2, Vector3, Vector4};
+use cgmath::{Matrix2, Matrix4, Point3, Vector2, Vector3, Vector4};
 use png::HasParameters;
+use rand::Rng;
 
 // https://nelari.us/post/raytracer_with_rust_and_zig/
 // https://www.cl.cam.ac.uk/teaching/1999/AGraphHCI/SMAG/node2.html
@@ -51,13 +53,11 @@ impl Intersect for Sphere {
             let dist = r_proj.magnitude() - discriminant.sqrt();
             let pos = r.point_at_distance(dist);
             
-            let intersection = Intersection {
+            Some(Intersection {
                 pos,
                 dist,
                 normal: (pos - self.center).normalize().extend(1.0),
-            };
-
-            Some(intersection)
+            })
         } else {
             None
         }
@@ -73,32 +73,50 @@ impl World {
         let mut pixels = Vec::new();
         let aspect = (height as f32) / (width as f32);
         let screen_space = Vector2::new(4.0, 4.0 * aspect);
-        let lower_left_corner = (screen_space / -2.0);
+        let lower_left_corner = (screen_space / -2.0).extend(-1.0).extend(1.0);
 
-        let screen_space_transform = Matrix2::new(
+        let screen_space_transform = Matrix4::new(
+            screen_space.x / (width as f32), 0.0, 0.0, 0.0,
+            0.0, screen_space.y / (height as f32), 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0);
+
+        let sst2 = Matrix2::new(
             screen_space.x / (width as f32), 0.0,
             0.0, screen_space.y / (height as f32));
 
+        let num_samples = 4;
+        let mut rng = rand::thread_rng();
+
         for y in 0..height {
             for x in 0..width {
-                let uv = screen_space_transform * Vector2::new(x as f32, y as f32);
+                let mut color = Vector3::zero();
 
-                let r = Ray {
-                    origin: Point3::new(0.0, 0.0, 0.0),
-                    direction: (lower_left_corner + uv).extend(-1.0).extend(1.0).normalize(),
+                for _ in 0..num_samples {
+                    let ofs_x = rng.gen_range(-0.5, 0.5);
+                    let ofs_y = rng.gen_range(-0.5, 0.5);
+                    let uv = screen_space_transform *
+                        Vector4::new(x as f32 + ofs_x, y as f32 + ofs_y, 0.0, 1.0);
+                    let direction = (lower_left_corner + uv).truncate().normalize().extend(1.0);
+
+                    let r = Ray {
+                        origin: Point3::new(0.0, 0.0, 0.0),
+                        direction,
+                    };
+
+                    let curr_ixn = self.spheres.iter().
+                        filter_map(|s| s.intersect(&r)).
+                        min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
+
+                    color += match curr_ixn {
+                        Some(ixn) => {
+                            0.5 * (ixn.normal.truncate() + Vector3::new(1.0, 1.0, 1.0))
+                        },
+                        None => Vector3::new(0.1, 0.4, 0.1),
+                    };
                 };
 
-                let curr_ixn = self.spheres.iter().
-                    filter_map(|s| s.intersect(&r)).
-                    min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
-
-                let color = 255.0 * match curr_ixn {
-                    Some(ixn) => {
-                        0.5 * (ixn.normal.truncate() + Vector3::new(1.0, 1.0, 1.0))
-                    },
-                    None => Vector3::new(0.1, 0.4, 0.1),
-                };
-
+                color *= 255.0 / (num_samples as f32);
                 pixels.push(color.x as u8);
                 pixels.push(color.y as u8);
                 pixels.push(color.z as u8);
@@ -121,8 +139,8 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 }
 
 fn main() {
-    let width = 900;
-    let height = 900;
+    let width = 800;
+    let height = 800;
     let path = Path::new("/var/www/rays.png");
 
     let world = World {
