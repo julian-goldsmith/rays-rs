@@ -70,23 +70,19 @@ pub struct World {
 
 impl World {
     fn render(&self, width: usize, height: usize) -> Vec<u8> {
+        let num_samples = 4;
         let mut pixels = Vec::new();
+        let mut rng = rand::thread_rng();
+
         let aspect = (height as f32) / (width as f32);
         let screen_space = Vector2::new(4.0, 4.0 * aspect);
-        let lower_left_corner = (screen_space / -2.0).extend(-1.0).extend(1.0);
+        let lower_left_corner = (screen_space / -2.0).extend(-1.0);
 
         let screen_space_transform = Matrix4::new(
             screen_space.x / (width as f32), 0.0, 0.0, 0.0,
             0.0, screen_space.y / (height as f32), 0.0, 0.0,
             0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0);
-
-        let sst2 = Matrix2::new(
-            screen_space.x / (width as f32), 0.0,
-            0.0, screen_space.y / (height as f32));
-
-        let num_samples = 4;
-        let mut rng = rand::thread_rng();
+            lower_left_corner.x, lower_left_corner.y, lower_left_corner.z, 1.0);
 
         for y in 0..height {
             for x in 0..width {
@@ -97,7 +93,7 @@ impl World {
                     let ofs_y = rng.gen_range(-0.5, 0.5);
                     let uv = screen_space_transform *
                         Vector4::new(x as f32 + ofs_x, y as f32 + ofs_y, 0.0, 1.0);
-                    let direction = (lower_left_corner + uv).truncate().normalize().extend(1.0);
+                    let direction = uv.truncate().normalize().extend(1.0);
 
                     let r = Ray {
                         origin: Point3::new(0.0, 0.0, 0.0),
