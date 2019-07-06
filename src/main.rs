@@ -75,26 +75,30 @@ impl World {
         let mut pixels = Vec::new();
         let mut rng = rand::thread_rng();
 
-        let aspect = (height as f32) / (width as f32);
-        let haspect = aspect / 2.0;
-        let persp = cgmath::frustum(-haspect, haspect, -0.5, 0.5, 1.0, 100.0);
-        let view = Matrix4::look_at_dir(Point3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.0, -2.0), Vector3::new(0.0, 1.0, 0.0));
+        let origin = Point3::new(0.0, 0.0, 0.0);
 
-        println!("{:?}", persp);
+        let aspect = (height as f32) / (width as f32);
+        let sst = Matrix4::new(
+            1.0 / width as f32, 0.0, 0.0, 0.0,
+            0.0, 1.0 / height as f32, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            -0.5, -0.5, 0.0, 1.0);
+
+        let persp = cgmath::frustum(aspect * -0.5, aspect * 0.5, -0.5, 0.5, 0.1, 10.0);
+        let view = sst * Matrix4::look_at(origin, Point3::new(0.0, 0.0, -1.0), Vector3::new(0.0, 1.0, 0.0));
 
         for y in (0..height).rev() {
             for x in 0..width {
                 let mut color = Vector3::zero();
+                let uv = Vector4::new(x as f32, y as f32, 0.0, 1.0);
 
                 for _ in 0..num_samples {
-                    let x = (x as f32 + rng.gen_range(-0.5, 0.5)) / (width as f32) - 0.5;
-                    let y = (y as f32 + rng.gen_range(-0.5, 0.5)) / (height as f32) - 0.5;
-                    let uv = Vector4::new(x, y, 0.0, 1.0);
-                    let origin = view * Point3::new(0.0, 0.0, 0.0).to_homogeneous();
-                    let direction = (persp * view * uv).truncate().normalize().extend(1.0);
+                    let jitter = Vector4::new(rng.gen_range(-0.5, 0.5), rng.gen_range(-0.5, 0.5), 0.0, 0.0);
+                    let direction = (persp * view * (uv + jitter) - origin.to_homogeneous()).                   // FIXME: origin doesn't work right.
+                        truncate().normalize().extend(1.0);
 
                     let r = Ray {
-                        origin: Point3::from_homogeneous(origin),
+                        origin,
                         direction,
                     };
 
@@ -142,6 +146,10 @@ fn main() {
             Sphere {
                 center: Point3::new(0.0, 0.0, -5.0),
                 radius: 0.5,
+            },
+            Sphere {
+                center: Point3::new(0.0, -100.5, -105.0),
+                radius: 100.0,
             },
         ],
     };
