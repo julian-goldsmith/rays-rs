@@ -13,6 +13,7 @@ use rand::Rng;
 // https://nelari.us/post/raytracer_with_rust_and_zig/
 // https://www.cl.cam.ac.uk/teaching/1999/AGraphHCI/SMAG/node2.html
 // http://www.realtimerendering.com/raytracing/Ray%20Tracing%20in%20a%20Weekend.pdf
+// https://www.tutorialspoint.com/computer_graphics/3d_transformation.htm
 
 // P(t) = E + tD, t >= 0
 #[derive(Copy, Clone)]
@@ -75,28 +76,25 @@ impl World {
         let mut rng = rand::thread_rng();
 
         let aspect = (height as f32) / (width as f32);
-        let screen_space = Vector2::new(4.0, 4.0 * aspect);
-        let lower_left_corner = (screen_space / -2.0).extend(-1.0);
+        let haspect = aspect / 2.0;
+        let persp = cgmath::frustum(-haspect, haspect, -0.5, 0.5, 1.0, 100.0);
+        let view = Matrix4::look_at_dir(Point3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.0, -2.0), Vector3::new(0.0, 1.0, 0.0));
 
-        let screen_space_transform = Matrix4::new(
-            screen_space.x / (width as f32), 0.0, 0.0, 0.0,
-            0.0, screen_space.y / (height as f32), 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            lower_left_corner.x, lower_left_corner.y, lower_left_corner.z, 1.0);
+        println!("{:?}", persp);
 
-        for y in 0..height {
+        for y in (0..height).rev() {
             for x in 0..width {
                 let mut color = Vector3::zero();
 
                 for _ in 0..num_samples {
-                    let ofs_x = rng.gen_range(-0.5, 0.5);
-                    let ofs_y = rng.gen_range(-0.5, 0.5);
-                    let uv = screen_space_transform *
-                        Vector4::new(x as f32 + ofs_x, y as f32 + ofs_y, 0.0, 1.0);
-                    let direction = uv.truncate().normalize().extend(1.0);
+                    let x = (x as f32 + rng.gen_range(-0.5, 0.5)) / (width as f32) - 0.5;
+                    let y = (y as f32 + rng.gen_range(-0.5, 0.5)) / (height as f32) - 0.5;
+                    let uv = Vector4::new(x, y, 0.0, 1.0);
+                    let origin = view * Point3::new(0.0, 0.0, 0.0).to_homogeneous();
+                    let direction = (persp * view * uv).truncate().normalize().extend(1.0);
 
                     let r = Ray {
-                        origin: Point3::new(0.0, 0.0, 0.0),
+                        origin: Point3::from_homogeneous(origin),
                         direction,
                     };
 
@@ -135,22 +133,14 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 }
 
 fn main() {
-    let width = 800;
-    let height = 800;
-    let path = Path::new("/var/www/rays.png");
+    let width = 1920;
+    let height = 1080;
+    let path = Path::new("/home/jrg/src/rays-rs/rays.png");
 
     let world = World {
         spheres: vec![
             Sphere {
-                center: Point3::new(0.0, 0.0, -2.0),
-                radius: 0.5,
-            },
-            Sphere {
-                center: Point3::new(1.0, 0.0, -1.5),
-                radius: 0.5,
-            },
-            Sphere {
-                center: Point3::new(-1.0, 0.0, -1.5),
+                center: Point3::new(0.0, 0.0, -5.0),
                 radius: 0.5,
             },
         ],
