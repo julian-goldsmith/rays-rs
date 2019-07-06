@@ -8,7 +8,7 @@ use std::io::BufWriter;
 use cgmath::prelude::*;
 use cgmath::{Matrix2, Matrix4, Point3, Vector2, Vector3, Vector4};
 use png::HasParameters;
-use rand::Rng;
+use rand::{Rng, rngs::ThreadRng};
 
 // https://nelari.us/post/raytracer_with_rust_and_zig/
 // https://www.cl.cam.ac.uk/teaching/1999/AGraphHCI/SMAG/node2.html
@@ -89,32 +89,12 @@ impl World {
 
         for y in (0..height).rev() {
             for x in 0..width {
-                let mut color = Vector3::zero();
-                let uv = Vector4::new(x as f32, y as f32, 0.0, 1.0);
+                let uv = Vector2::new(x as f32, y as f32);
 
-                for _ in 0..num_samples {
-                    let jitter = Vector4::new(rng.gen_range(-0.5, 0.5), rng.gen_range(-0.5, 0.5), 0.0, 0.0);
-                    let direction = (persp * view * (uv + jitter) - origin.to_homogeneous()).                   // FIXME: origin doesn't work right.
-                        truncate().normalize().extend(1.0);
+                let color: Vector3<f32> = (0..num_samples).
+                    fold(Vector3::zero(), |acc, _| acc + self.sample(&mut rng, origin, uv, &persp, &view)) *
+                    255.0 / (num_samples as f32);
 
-                    let r = Ray {
-                        origin,
-                        direction,
-                    };
-
-                    let curr_ixn = self.spheres.iter().
-                        filter_map(|s| s.intersect(&r)).
-                        min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
-
-                    color += match curr_ixn {
-                        Some(ixn) => {
-                            0.5 * (ixn.normal.truncate() + Vector3::new(1.0, 1.0, 1.0))
-                        },
-                        None => Vector3::new(0.1, 0.4, 0.1),
-                    };
-                };
-
-                color *= 255.0 / (num_samples as f32);
                 pixels.push(color.x as u8);
                 pixels.push(color.y as u8);
                 pixels.push(color.z as u8);
@@ -122,6 +102,26 @@ impl World {
         };
 
         pixels
+    }
+
+    fn sample(&self, rng: &mut ThreadRng, origin: Point3<f32>, uv: Vector2<f32>,
+              persp: &Matrix4<f32>, view: &Matrix4<f32>) -> Vector3<f32> {
+        let sample_uv = Vector4::new(uv.x + rng.gen_range(-0.5, 0.5),
+            uv.y + rng.gen_range(-0.5, 0.5), 0.0, 1.0);
+        let direction = (persp * view * sample_uv).truncate().normalize().extend(1.0);
+
+        let r = Ray { origin, direction };
+
+        let curr_ixn = self.spheres.iter().
+            filter_map(|s| s.intersect(&r)).
+            min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
+
+        match curr_ixn {
+            Some(ixn) => {
+                0.5 * (ixn.normal.truncate() + Vector3::new(1.0, 1.0, 1.0))
+            },
+            None => Vector3::new(0.1, 0.4, 0.1),
+        }
     }
 }
 
