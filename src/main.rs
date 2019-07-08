@@ -10,7 +10,7 @@ use cgmath::prelude::*;
 use cgmath::{Matrix2, Matrix4, Point3, Vector2, Vector3, Vector4};
 use png::HasParameters;
 use rand::{Rng, rngs::ThreadRng};
-use rand_distr::{Distribution, Normal};
+use rand_distr::{Distribution, Normal, UnitSphere};
 
 // https://nelari.us/post/raytracer_with_rust_and_zig/
 // https://www.cl.cam.ac.uk/teaching/1999/AGraphHCI/SMAG/node2.html
@@ -76,7 +76,7 @@ impl World {
         let num_samples = 8;
         let mut pixels = Vec::new();
         let mut rng = rand::thread_rng();
-        let dist = Normal::new(0.0, 0.25).unwrap();                   // TODO: Adjust.
+        let ndist = Normal::new(0.0, 0.25).unwrap();                   // TODO: Adjust.
 
         let origin = Point3::new(0.0, 0.0, 0.0);
 
@@ -96,7 +96,7 @@ impl World {
 
                 let color: Vector3<f32> = (0..num_samples).
                     fold(Vector3::zero(),
-                         |acc, _| acc + self.sample(&mut rng, &dist, origin, uv, &persp, &view)) *
+                         |acc, _| acc + self.sample(&mut rng, &ndist, origin, uv, &persp, &view)) *
                     255.0 / (num_samples as f32);
 
                 pixels.push(color.x as u8);
@@ -108,9 +108,9 @@ impl World {
         pixels
     }
 
-    fn sample(&self, rng: &mut ThreadRng, dist: &Normal<f32>, origin: Point3<f32>, uv: Vector2<f32>,
+    fn sample(&self, rng: &mut ThreadRng, ndist: &Normal<f32>, origin: Point3<f32>, uv: Vector2<f32>,
               persp: &Matrix4<f32>, view: &Matrix4<f32>) -> Vector3<f32> {
-        let jitter = Vector2::new(dist.sample(rng), dist.sample(rng));
+        let jitter = Vector2::new(ndist.sample(rng), ndist.sample(rng));
         let sample_uv = Vector4::new(uv.x + jitter.x, uv.y + jitter.y, 0.0, 1.0);
         let direction = (persp * view * sample_uv).truncate().normalize();
 
