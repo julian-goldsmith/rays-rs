@@ -49,7 +49,7 @@ pub struct Sphere {
 
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let r_proj = self.center.to_vec().project_on(r.origin.to_vec() + r.direction).extend(1.0);
+        let r_proj = self.center.to_vec().project_on(r.origin.to_vec() + r.direction);
         let discriminant = r_proj.magnitude2() + self.radius * self.radius - self.center.distance2(r.origin);
 
         if discriminant > 0.0 {
