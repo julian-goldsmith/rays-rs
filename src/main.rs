@@ -124,10 +124,19 @@ impl World {
 
             color += match curr_ixn {
                 Some(ixn) => {
-                    let bounce: Vector3<f32> = UnitSphere.sample(rng).into();
-                    let target = ixn.pos + ixn.normal + bounce;
+                    if (r.origin - ixn.pos).magnitude() < 0.01 {
+                        Vector3::new(0.0, 0.0, 0.0)
+                    } else {
+                        let bounce: Vector3<f32> = UnitSphere.sample(rng).into();
+                        let target = ixn.pos + ixn.normal;// + bounce;
 
-                    0.5 * ((ixn.pos - target).normalize() + Vector3::new(1.0, 1.0, 1.0))
+                        let tr = Ray {
+                            origin: ixn.pos,
+                            direction: (target - ixn.pos).normalize(),
+                        };
+
+                        0.5 * self.sample(rng, tr, 0.0)
+                    }
                 },
                 None => Vector3::new(0.4, 0.4, 0.5),
             };
