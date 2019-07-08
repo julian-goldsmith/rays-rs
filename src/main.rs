@@ -1,6 +1,7 @@
 extern crate cgmath;
 extern crate png;
 extern crate rand;
+extern crate rand_distr;
 
 use std::path::Path;
 use std::fs::File;
@@ -9,6 +10,7 @@ use cgmath::prelude::*;
 use cgmath::{Matrix2, Matrix4, Point3, Vector2, Vector3, Vector4};
 use png::HasParameters;
 use rand::{Rng, rngs::ThreadRng};
+use rand_distr::{Distribution, Normal};
 
 // https://nelari.us/post/raytracer_with_rust_and_zig/
 // https://www.cl.cam.ac.uk/teaching/1999/AGraphHCI/SMAG/node2.html
@@ -19,12 +21,12 @@ use rand::{Rng, rngs::ThreadRng};
 #[derive(Copy, Clone)]
 pub struct Ray {
     pub origin: Point3<f32>,
-    pub direction: Vector4<f32>,
+    pub direction: Vector3<f32>,
 }
 
 impl Ray {
     pub fn point_at_distance(&self, dist: f32) -> Point3<f32> {
-        self.origin + self.direction.truncate() * dist
+        self.origin + self.direction * dist
     }
 }
 
@@ -32,7 +34,7 @@ impl Ray {
 pub struct Intersection {
     pub pos: Point3<f32>,
     pub dist: f32,
-    pub normal: Vector4<f32>,
+    pub normal: Vector3<f32>,
 }
 
 pub trait Intersect {
@@ -47,7 +49,7 @@ pub struct Sphere {
 
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let r_proj = self.center.to_vec().project_on(r.origin.to_vec() + r.direction.truncate()).extend(1.0);
+        let r_proj = self.center.to_vec().project_on(r.origin.to_vec() + r.direction).extend(1.0);
         let discriminant = r_proj.magnitude2() + self.radius * self.radius - self.center.distance2(r.origin);
 
         if discriminant > 0.0 {
@@ -57,7 +59,7 @@ impl Intersect for Sphere {
             Some(Intersection {
                 pos,
                 dist,
-                normal: (pos - self.center).normalize().extend(1.0),
+                normal: (pos - self.center).normalize(),
             })
         } else {
             None
@@ -71,9 +73,10 @@ pub struct World {
 
 impl World {
     fn render(&self, width: usize, height: usize) -> Vec<u8> {
-        let num_samples = 4;
+        let num_samples = 8;
         let mut pixels = Vec::new();
         let mut rng = rand::thread_rng();
+        let dist = Normal::new(0.0, 0.25).unwrap();                   // TODO: Adjust.
 
         let origin = Point3::new(0.0, 0.0, 0.0);
 
@@ -92,7 +95,8 @@ impl World {
                 let uv = Vector2::new(x as f32, y as f32);
 
                 let color: Vector3<f32> = (0..num_samples).
-                    fold(Vector3::zero(), |acc, _| acc + self.sample(&mut rng, origin, uv, &persp, &view)) *
+                    fold(Vector3::zero(),
+                         |acc, _| acc + self.sample(&mut rng, &dist, origin, uv, &persp, &view)) *
                     255.0 / (num_samples as f32);
 
                 pixels.push(color.x as u8);
@@ -104,11 +108,11 @@ impl World {
         pixels
     }
 
-    fn sample(&self, rng: &mut ThreadRng, origin: Point3<f32>, uv: Vector2<f32>,
+    fn sample(&self, rng: &mut ThreadRng, dist: &Normal<f32>, origin: Point3<f32>, uv: Vector2<f32>,
               persp: &Matrix4<f32>, view: &Matrix4<f32>) -> Vector3<f32> {
-        let sample_uv = Vector4::new(uv.x + rng.gen_range(-0.5, 0.5),
-            uv.y + rng.gen_range(-0.5, 0.5), 0.0, 1.0);
-        let direction = (persp * view * sample_uv).truncate().normalize().extend(1.0);
+        let jitter = Vector2::new(dist.sample(rng), dist.sample(rng));
+        let sample_uv = Vector4::new(uv.x + jitter.x, uv.y + jitter.y, 0.0, 1.0);
+        let direction = (persp * view * sample_uv).truncate().normalize();
 
         let r = Ray { origin, direction };
 
@@ -118,7 +122,7 @@ impl World {
 
         match curr_ixn {
             Some(ixn) => {
-                0.5 * (ixn.normal.truncate() + Vector3::new(1.0, 1.0, 1.0))
+                0.5 * (ixn.normal + Vector3::new(1.0, 1.0, 1.0))
             },
             None => Vector3::new(0.1, 0.4, 0.1),
         }
@@ -139,7 +143,7 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 fn main() {
     let width = 1920;
     let height = 1080;
-    let path = Path::new("/home/jrg/src/rays-rs/rays.png");
+    let path = Path::new("/var/www/rays.png");
 
     let world = World {
         spheres: vec![
