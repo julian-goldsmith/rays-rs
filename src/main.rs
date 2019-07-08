@@ -7,9 +7,9 @@ use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
-use cgmath::{Matrix2, Matrix4, Point3, Vector2, Vector3, Vector4};
+use cgmath::{Matrix4, Point3, Vector2, Vector3, Vector4};
 use png::HasParameters;
-use rand::{Rng, rngs::ThreadRng};
+use rand::rngs::ThreadRng;
 use rand_distr::{Distribution, Normal, UnitSphere};
 
 // https://nelari.us/post/raytracer_with_rust_and_zig/
@@ -73,7 +73,7 @@ pub struct World {
 
 impl World {
     fn render(&self, width: usize, height: usize) -> Vec<u8> {
-        let num_samples = 8;
+        let num_samples = 4;
         let mut pixels = Vec::new();
         let mut rng = rand::thread_rng();
         let ndist = Normal::new(0.0, 0.25).unwrap();                   // TODO: Adjust.
@@ -122,7 +122,10 @@ impl World {
 
         match curr_ixn {
             Some(ixn) => {
-                0.5 * (ixn.normal + Vector3::new(1.0, 1.0, 1.0))
+                let bounce: Vector3<f32> = UnitSphere.sample(rng).into();
+                let target = ixn.pos + ixn.normal + bounce;
+
+                0.5 * ((ixn.pos - target).normalize() + Vector3::new(1.0, 1.0, 1.0))
             },
             None => Vector3::new(0.1, 0.4, 0.1),
         }
