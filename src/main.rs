@@ -7,7 +7,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
-use cgmath::{Matrix4, Point3, Vector2, Vector3, Vector4};
+use cgmath::{Matrix3, Matrix4, Point3, Vector2, Vector3, Vector4};
 use png::HasParameters;
 use rand::Rng;
 use rand_distr::{Distribution, UnitSphere};
@@ -79,19 +79,24 @@ impl World {
         let origin = Point3::new(0.0, 0.0, 0.0);                        // FIXME: Origin doesn't work properly.
 
         let aspect = (height as f32) / (width as f32);
-        let sst = Matrix4::new(
-            1.0 / width as f32, 0.0, 0.0, 0.0,
-            0.0, 1.0 / height as f32, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            -0.5, -0.5, 0.0, 1.0);
+        let uvt = Matrix3::new(
+            1.0 / width as f32, 0.0, 0.0,
+            0.0, 1.0 / height as f32, 0.0,
+            -0.5, -0.5, 1.0);
+        let jitter_factor = 1.0 / width as f32;
 
         let persp = cgmath::frustum(aspect * -0.5, aspect * 0.5, -0.5, 0.5, 0.1, 100.0);
-        let view = sst * Matrix4::look_at(origin, Point3::new(0.0, 0.0, -1.0), Vector3::new(0.0, 1.0, 0.0));
+        let view = Matrix4::look_at(origin, Point3::new(0.0, 0.0, -1.0), Vector3::new(0.0, 1.0, 0.0));
 
         for y in (0..height).rev() {
             for x in 0..width {
-                let uv = Vector2::new(x as f32, y as f32);
-                let color = self.sample(&mut rng, origin, uv, &persp, &view) * 255.0;
+                let uv = (uvt * Vector3::new(x as f32, y as f32, 1.0)).truncate();
+
+                let sample_uv = uv.extend(0.0).extend(1.0);
+                let direction = (persp * view * sample_uv).truncate();
+                let r = Ray { origin, direction };
+
+                let color = self.sample(&mut rng, r, jitter_factor) * 255.0;
 
                 pixels.push(color.x as u8);
                 pixels.push(color.y as u8);
@@ -102,20 +107,19 @@ impl World {
         pixels
     }
 
-    fn sample(&self, rng: &mut impl Rng, origin: Point3<f32>, uv: Vector2<f32>,
-              persp: &Matrix4<f32>, view: &Matrix4<f32>) -> Vector3<f32> {
+    fn sample(&self, rng: &mut impl Rng, r: Ray, jitter_factor: f32) -> Vector3<f32> {
         let num_samples = 4;
         let mut color = Vector3::zero();
 
         for _ in 0..num_samples {
-            let jitter = Vector3::<f32>::from(UnitSphere.sample(rng)).truncate();
-            let sample_uv = (uv + jitter).extend(0.0).extend(1.0);
-            let direction = (persp * view * sample_uv).truncate().normalize();
-
-            let r = Ray { origin, direction };
+            let jitter = Vector3::<f32>::from(UnitSphere.sample(rng)).normalize() * jitter_factor;
+            let jr = Ray {
+                origin: r.origin,
+                direction: (r.direction + jitter).normalize(),
+            };
 
             let curr_ixn = self.spheres.iter().
-                filter_map(|s| s.intersect(&r)).
+                filter_map(|s| s.intersect(&jr)).
                 min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
 
             color += match curr_ixn {
@@ -125,7 +129,7 @@ impl World {
 
                     0.5 * ((ixn.pos - target).normalize() + Vector3::new(1.0, 1.0, 1.0))
                 },
-                None => Vector3::new(0.1, 0.4, 0.1),
+                None => Vector3::new(0.4, 0.4, 0.5),
             };
         };
 
