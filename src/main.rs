@@ -9,7 +9,7 @@ use std::io::BufWriter;
 use cgmath::prelude::*;
 use cgmath::{Matrix4, Point3, Vector2, Vector3, Vector4};
 use png::HasParameters;
-use rand::rngs::ThreadRng;
+use rand::Rng;
 use rand_distr::{Distribution, Normal, UnitSphere};
 
 // https://nelari.us/post/raytracer_with_rust_and_zig/
@@ -108,9 +108,10 @@ impl World {
         pixels
     }
 
-    fn sample(&self, rng: &mut ThreadRng, ndist: &Normal<f32>, origin: Point3<f32>, uv: Vector2<f32>,
-              persp: &Matrix4<f32>, view: &Matrix4<f32>) -> Vector3<f32> {
-        let jitter = Vector2::new(ndist.sample(rng), ndist.sample(rng));
+    fn sample(&self, rng: &mut impl Rng, dist: &impl Distribution<f32>,
+              origin: Point3<f32>, uv: Vector2<f32>, persp: &Matrix4<f32>,
+              view: &Matrix4<f32>) -> Vector3<f32> {
+        let jitter = Vector2::new(dist.sample(rng), dist.sample(rng));
         let sample_uv = Vector4::new(uv.x + jitter.x, uv.y + jitter.y, 0.0, 1.0);
         let direction = (persp * view * sample_uv).truncate().normalize();
 
