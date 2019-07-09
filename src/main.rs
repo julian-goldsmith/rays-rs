@@ -50,12 +50,12 @@ pub struct Sphere {
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
         let oc = r.origin - self.center;
-        let b = oc.dot(r.direction);
+        let b = 0.5 * oc.dot(r.direction);
         let c = oc.magnitude2() - self.radius * self.radius;
         let discriminant = b * b - c;
 
         if discriminant > 0.0 {
-            let dist = 0.5 * (-b - 2.0 * discriminant.sqrt());
+            let dist = -b - discriminant.sqrt());
             let pos = r.point_at_distance(dist);
 
             if dist < 0.001 {
