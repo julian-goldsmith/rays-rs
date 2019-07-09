@@ -52,16 +52,10 @@ impl Intersect for Sphere {
         let oc = r.origin - self.center;
         let b = oc.dot(r.direction);
         let c = oc.magnitude2() - self.radius * self.radius;
-        let discriminant = 4.0 * (b * b - c);
-
-        let r_proj = self.center.to_vec().project_on(r.origin.to_vec() + r.direction);
-        let discriminant2 = r_proj.magnitude2() + self.radius * self.radius - self.center.distance2(r.origin);
-
-        //assert_eq!(discriminant2, discriminant);
+        let discriminant = b * b - c;
 
         if discriminant > 0.0 {
-            //let dist = r_proj.magnitude() - discriminant.sqrt();
-            let dist = 0.5 * (-b - discriminant.sqrt());
+            let dist = 0.5 * (-b - 2.0 * discriminant.sqrt());
             let pos = r.point_at_distance(dist);
 
             if dist < 0.001 {
