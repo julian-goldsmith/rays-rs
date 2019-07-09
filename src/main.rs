@@ -49,11 +49,19 @@ pub struct Sphere {
 
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
+        let oc = r.origin - self.center;
+        let b = oc.dot(r.direction);
+        let c = oc.magnitude2() - self.radius * self.radius;
+        let discriminant = 4.0 * (b * b - c);
+
         let r_proj = self.center.to_vec().project_on(r.origin.to_vec() + r.direction);
-        let discriminant = r_proj.magnitude2() + self.radius * self.radius - self.center.distance2(r.origin);
+        let discriminant2 = r_proj.magnitude2() + self.radius * self.radius - self.center.distance2(r.origin);
+
+        //assert_eq!(discriminant2, discriminant);
 
         if discriminant > 0.0 {
-            let dist = r_proj.magnitude() - discriminant.sqrt();
+            //let dist = r_proj.magnitude() - discriminant.sqrt();
+            let dist = 0.5 * (-b - discriminant.sqrt());
             let pos = r.point_at_distance(dist);
 
             if dist < 0.001 {
@@ -90,7 +98,7 @@ impl World {
             -0.5, -0.5, 1.0);
         let jitter_factor = Vector3::new(0.5 / width as f32, 0.5 / height as f32, 0.0);
 
-        let persp = cgmath::frustum(aspect * -0.5, aspect * 0.5, -0.5, 0.5, 0.1, 100.0);
+        let persp = cgmath::frustum(aspect * -0.5, aspect * 0.5, -0.5, 0.5, 0.1, 10.0);
         let view = Matrix4::look_at(origin, Point3::new(0.0, 0.0, -1.0), Vector3::new(0.0, 1.0, 0.0));
 
         for y in (0..height).rev() {
@@ -107,7 +115,7 @@ impl World {
                         mul_element_wise(jitter_factor);
                     let r = Ray {
                         origin: origin,
-                        direction: (direction + jitter).normalize(),
+                        direction: (direction /*+ jitter*/).normalize(),
                     };
 
                     color += self.sample(&mut rng, r, 0);
@@ -146,7 +154,8 @@ impl World {
                         direction: (target - ixn.pos).normalize(),
                     };
 
-                    0.9 * self.sample(rng, tr, depth + 1)
+                    //0.9 * self.sample(rng, tr, depth + 1)
+                    0.5 * (ixn.normal + Vector3::new(1.0, 1.0, 1.0))
                 }
             },
             None => {
@@ -168,20 +177,27 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 }
 
 fn main() {
-    let width = 1920;
-    let height = 1080;
+    let width = 192;
+    let height = 108;
     let path = Path::new("/var/www/rays.png");
 
     let world = World {
         spheres: vec![
             Sphere {
-                center: Point3::new(0.0, 0.0, -5.0),
+                center: Point3::new(0.0, -1.0, -5.0),
                 radius: 0.5,
             },
+            Sphere {
+                center: Point3::new(0.0, -10.5, -1.0),
+                radius: 10.0,
+            },
+            /*
+             * FIXME: This causes weird results.
             Sphere {
                 center: Point3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
             },
+            */
         ],
     };
     let data = world.render(width, height);
