@@ -87,7 +87,7 @@ impl World {
         let mut pixels = Vec::new();
         let mut rng = rand::thread_rng();
 
-        let origin = Point3::new(0.0, 0.0, 0.0);                        // FIXME: Origin doesn't work properly.
+        let origin = Point3::new(0.0, 0.0, 1.0);                        // FIXME: Origin doesn't work properly.
 
         let aspect = (height as f32) / (width as f32);
         let uvt = Matrix3::new(
