@@ -60,7 +60,7 @@ impl Intersect for Sphere {
                 b - discriminant.sqrt()
             };
 
-            if dist > 0.001 {
+            if dist > 0.0001 {
                 let pos = r.point_at_distance(dist);
 
                 Some(Intersection {
@@ -108,7 +108,9 @@ impl World {
                 let mut color = Vector3::zero();
 
                 for _ in 0..num_samples {
-                    let jitter = Vector3::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5, 0.0).
+                    let jitter = Vector3::new(
+                            rand::random::<f32>() - 0.5,
+                            rand::random::<f32>() - 0.5, 0.0).
                         mul_element_wise(jitter_factor);
                     let r = Ray {
                         origin: origin,
