@@ -50,23 +50,27 @@ pub struct Sphere {
 impl Intersect for Sphere {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
         let oc = r.origin - self.center;
-        let b = 0.5 * oc.dot(r.direction);
-        let c = oc.magnitude2() - self.radius * self.radius;
-        let discriminant = b * b - c;
+        let b = -oc.dot(r.direction);
+        let discriminant = b * b + self.radius * self.radius - oc.magnitude2();
 
         if discriminant > 0.0 {
-            let dist = -b - discriminant.sqrt());
-            let pos = r.point_at_distance(dist);
-
-            if dist < 0.001 {
-                return None;
+            let dist = if b < discriminant.sqrt() {
+                b + discriminant.sqrt()
+            } else {
+                b - discriminant.sqrt()
             };
-            
-            Some(Intersection {
-                pos,
-                dist,
-                normal: (pos - self.center).normalize(),
-            })
+
+            if dist > 0.001 {
+                let pos = r.point_at_distance(dist);
+
+                Some(Intersection {
+                    pos,
+                    dist,
+                    normal: (pos - self.center).normalize(),
+                })
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -109,7 +113,7 @@ impl World {
                         mul_element_wise(jitter_factor);
                     let r = Ray {
                         origin: origin,
-                        direction: (direction /*+ jitter*/).normalize(),
+                        direction: (direction + jitter).normalize(),
                     };
 
                     color += self.sample(&mut rng, r, 0);
@@ -148,8 +152,7 @@ impl World {
                         direction: (target - ixn.pos).normalize(),
                     };
 
-                    //0.9 * self.sample(rng, tr, depth + 1)
-                    0.5 * (ixn.normal + Vector3::new(1.0, 1.0, 1.0))
+                    0.9 * self.sample(rng, tr, depth + 1)
                 }
             },
             None => {
@@ -171,27 +174,20 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 }
 
 fn main() {
-    let width = 192;
-    let height = 108;
+    let width = 1920;
+    let height = 1080;
     let path = Path::new("/var/www/rays.png");
 
     let world = World {
         spheres: vec![
             Sphere {
-                center: Point3::new(0.0, -1.0, -5.0),
+                center: Point3::new(0.0, 0.0, -5.0),
                 radius: 0.5,
             },
-            Sphere {
-                center: Point3::new(0.0, -10.5, -1.0),
-                radius: 10.0,
-            },
-            /*
-             * FIXME: This causes weird results.
             Sphere {
                 center: Point3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
             },
-            */
         ],
     };
     let data = world.render(width, height);
