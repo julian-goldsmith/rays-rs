@@ -87,7 +87,7 @@ impl World {
         let mut pixels = Vec::new();
         let mut rng = rand::thread_rng();
 
-        let origin = Point3::new(0.0, 0.0, 1.0);                        // FIXME: Origin doesn't work properly.
+        let origin = Point3::new(0.0, 0.0, 0.0);                        // FIXME: Origin doesn't work properly.
 
         let aspect = (height as f32) / (width as f32);
         let uvt = Matrix3::new(
@@ -108,8 +108,7 @@ impl World {
                 let mut color = Vector3::zero();
 
                 for _ in 0..num_samples {
-                    let jitter = Vector3::<f32>::from(UnitSphere.sample(&mut rng)).
-                        normalize().
+                    let jitter = Vector3::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5, 0.0).
                         mul_element_wise(jitter_factor);
                     let r = Ray {
                         origin: origin,
@@ -119,7 +118,9 @@ impl World {
                     color += self.sample(&mut rng, r, 0);
                 };
 
-                let color = color * 255.0 / num_samples as f32;
+                let color = color / num_samples as f32;
+                let color = Vector3::new(color.x.sqrt(), color.y.sqrt(), color.z.sqrt());
+                let color = color * 255.999;
                 pixels.push(color.x as u8);
                 pixels.push(color.y as u8);
                 pixels.push(color.z as u8);
@@ -143,8 +144,8 @@ impl World {
                 if (r.origin - ixn.pos).magnitude() < 0.01 {
                     Vector3::new(0.0, 0.0, 0.0)
                 } else {
-                    let bounce: Vector3<f32> = UnitSphere.sample(rng).into();
-                    let bounce = (2.0 * bounce - Vector3::new(1.0, 1.0, 1.0)).normalize();
+                    let jitter = Vector3::<f32>::from(UnitSphere.sample(rng));
+                    let bounce = (2.0 * jitter - Vector3::new(1.0, 1.0, 1.0)).normalize();
                     let target = ixn.pos + ixn.normal + bounce;
 
                     let tr = Ray {
@@ -152,11 +153,11 @@ impl World {
                         direction: (target - ixn.pos).normalize(),
                     };
 
-                    0.9 * self.sample(rng, tr, depth + 1)
+                    0.5 * self.sample(rng, tr, depth + 1)
                 }
             },
             None => {
-                Vector3::new(0.4, 0.4, 0.5)
+                Vector3::new(0.6, 0.6, 0.6)
             },
         }
     }
