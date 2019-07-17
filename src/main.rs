@@ -9,7 +9,6 @@ use std::io::BufWriter;
 use cgmath::prelude::*;
 use cgmath::{Matrix3, Matrix4, Point3, Vector3};
 use png::HasParameters;
-use rand::Rng;
 use rand_distr::{Distribution, UnitSphere};
 
 // https://nelari.us/post/raytracer_with_rust_and_zig/
@@ -88,18 +87,17 @@ impl World {
     fn render(&self, width: usize, height: usize) -> Vec<u8> {
         let num_samples = 8;
         let mut pixels = Vec::new();
-        let mut rng = rand::thread_rng();
 
         let origin = Point3::new(0.0, 0.0, 0.0);                        // FIXME: Origin doesn't work properly.
 
-        let aspect = (height as f32) / (width as f32);
+        let aspect = (width as f32) / (height as f32);
         let uvt = Matrix3::new(
             1.0 / width as f32, 0.0, 0.0,
             0.0, 1.0 / height as f32, 0.0,
             -0.5, -0.5, 1.0);
         let jitter_factor = Vector3::new(0.5 / width as f32, 0.5 / height as f32, 0.0);
 
-        let persp = cgmath::frustum(aspect * -0.5, aspect * 0.5, -0.5, 0.5, 0.1, 10.0);
+        let persp = cgmath::frustum(-0.5, 0.5, aspect * -0.5, aspect * 0.5, 0.1, 10.0);
         let view = Matrix4::look_at(origin, Point3::new(0.0, 0.0, -1.0), Vector3::new(0.0, 1.0, 0.0));
 
         for y in (0..height).rev() {
@@ -120,7 +118,7 @@ impl World {
                         direction: (direction + jitter).normalize(),
                     };
 
-                    color += self.sample(&mut rng, r, 0);
+                    color += self.sample(r, 0);
                 };
 
                 let color = color / num_samples as f32;
@@ -135,7 +133,9 @@ impl World {
         pixels
     }
 
-    fn sample(&self, rng: &mut impl Rng, r: Ray, depth: usize) -> Vector3<f32> {
+    fn sample(&self, r: Ray, depth: usize) -> Vector3<f32> {
+        let mut rng = rand::thread_rng();
+
         if depth > 4 {
             return Vector3::new(1.0, 0.0, 0.0);
         };
@@ -146,25 +146,24 @@ impl World {
 
         match curr_ixn {
             Some(ixn) => {
-                if (r.origin - ixn.pos).magnitude() < 0.0001 {
-                    Vector3::new(0.0, 0.0, 0.0)
-                } else {
+                if (r.origin - ixn.pos).magnitude() > 0.0001 {
+                    let num_bounces = 4;
                     let mut color = Vector3::zero();
 
-                    for _ in 0..8 {
-                        let jitter = Vector3::<f32>::from(UnitSphere.sample(rng));
-                        let bounce = (2.0 * jitter - Vector3::new(1.0, 1.0, 1.0)).normalize();
-                        let target = ixn.pos + ixn.normal + bounce;
-
+                    for _ in 0..num_bounces {
+                        let jitter = Vector3::<f32>::from(UnitSphere.sample(&mut rng)) * 0.5;
                         let tr = Ray {
                             origin: ixn.pos,
-                            direction: (target - ixn.pos).normalize(),
+                            direction: (ixn.normal + jitter - Vector3::new(0.5, 0.5, 0.5)).normalize(),
                         };
 
-                        color += ixn.color.mul_element_wise(self.sample(rng, tr, depth + 1));
+                        let bounce_sample = self.sample(tr, depth + 1);
+                        color += ixn.color.mul_element_wise(bounce_sample);
                     };
 
-                    color / 8.0
+                    color / num_bounces as f32
+                } else {
+                    Vector3::new(0.0, 0.0, 0.0)
                 }
             },
             None => {
