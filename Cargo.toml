@@ -5,7 +5,10 @@ authors = ["Julian Goldsmith <julian@juliangoldsmith.com>"]
 edition = "2018"
 
 [dependencies]
-cgmath = "0.17"
 png = "0.14"
 rand = "0.7"
 rand_distr = "0.2"
+
+[dependencies.cgmath]
+version = "0.17"
+#features = ["simd"]		# Needs unstable.

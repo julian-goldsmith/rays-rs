@@ -7,7 +7,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
-use cgmath::{Matrix3, Matrix4, Point3, Vector2, Vector3, Vector4};
+use cgmath::{Matrix3, Matrix4, Point3, Vector3};
 use png::HasParameters;
 use rand::Rng;
 use rand_distr::{Distribution, UnitSphere};
@@ -35,6 +35,7 @@ pub struct Intersection {
     pub pos: Point3<f32>,
     pub dist: f32,
     pub normal: Vector3<f32>,
+    pub color: Vector3<f32>,
 }
 
 pub trait Intersect {
@@ -45,6 +46,7 @@ pub trait Intersect {
 pub struct Sphere {
     pub center: Point3<f32>,
     pub radius: f32,
+    pub color: Vector3<f32>,
 }
 
 impl Intersect for Sphere {
@@ -67,6 +69,7 @@ impl Intersect for Sphere {
                     pos,
                     dist,
                     normal: (pos - self.center).normalize(),
+                    color: self.color,
                 })
             } else {
                 None
@@ -83,7 +86,7 @@ pub struct World {
 
 impl World {
     fn render(&self, width: usize, height: usize) -> Vec<u8> {
-        let num_samples = 4;
+        let num_samples = 8;
         let mut pixels = Vec::new();
         let mut rng = rand::thread_rng();
 
@@ -133,7 +136,7 @@ impl World {
     }
 
     fn sample(&self, rng: &mut impl Rng, r: Ray, depth: usize) -> Vector3<f32> {
-        if depth > 8 {
+        if depth > 4 {
             return Vector3::new(1.0, 0.0, 0.0);
         };
 
@@ -143,19 +146,25 @@ impl World {
 
         match curr_ixn {
             Some(ixn) => {
-                if (r.origin - ixn.pos).magnitude() < 0.01 {
+                if (r.origin - ixn.pos).magnitude() < 0.0001 {
                     Vector3::new(0.0, 0.0, 0.0)
                 } else {
-                    let jitter = Vector3::<f32>::from(UnitSphere.sample(rng));
-                    let bounce = (2.0 * jitter - Vector3::new(1.0, 1.0, 1.0)).normalize();
-                    let target = ixn.pos + ixn.normal + bounce;
+                    let mut color = Vector3::zero();
 
-                    let tr = Ray {
-                        origin: ixn.pos,
-                        direction: (target - ixn.pos).normalize(),
+                    for _ in 0..8 {
+                        let jitter = Vector3::<f32>::from(UnitSphere.sample(rng));
+                        let bounce = (2.0 * jitter - Vector3::new(1.0, 1.0, 1.0)).normalize();
+                        let target = ixn.pos + ixn.normal + bounce;
+
+                        let tr = Ray {
+                            origin: ixn.pos,
+                            direction: (target - ixn.pos).normalize(),
+                        };
+
+                        color += ixn.color.mul_element_wise(self.sample(rng, tr, depth + 1));
                     };
 
-                    0.5 * self.sample(rng, tr, depth + 1)
+                    color / 8.0
                 }
             },
             None => {
@@ -179,17 +188,19 @@ fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
 fn main() {
     let width = 1920;
     let height = 1080;
-    let path = Path::new("/var/www/rays.png");
+    let path = Path::new("rays.png");
 
     let world = World {
         spheres: vec![
             Sphere {
                 center: Point3::new(0.0, 0.0, -5.0),
                 radius: 0.5,
+                color: Vector3::new(0.7, 0.3, 0.3),
             },
             Sphere {
                 center: Point3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
+                color: Vector3::new(0.1, 0.1, 0.9),
             },
         ],
     };
