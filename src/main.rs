@@ -68,14 +68,18 @@ impl Intersect for Sphere {
                 b - discriminant.sqrt()
             };
 
-            let pos = r.point_at_distance(dist);
+            if dist > 0.0001 {
+                let pos = r.point_at_distance(dist);
 
-            Some(Intersection {
-                pos,
-                dist,
-                normal: (pos - self.center).normalize(),
-                color: self.color,
-            })
+                Some(Intersection {
+                    pos,
+                    dist,
+                    normal: (pos - self.center).normalize(),
+                    color: self.color,
+                })
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -102,8 +106,7 @@ impl World {
             min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
 
         match curr_ixn {
-            Some(ixn) if ixn.dist > 0.0001 => {
-                /*
+            Some(ixn) => {
                 let num_bounces = 4;
                 let mut color = Vector3::zero();
 
@@ -116,9 +119,6 @@ impl World {
                 };
 
                 color / num_bounces as f32
-                */
-
-                0.5 * (ixn.normal + Vector3::new(0.5, 0.5, 0.5))
             },
             _ => {
                 Vector3::new(0.6, 0.6, 0.6)
@@ -175,7 +175,7 @@ impl Renderer {
                 self.render_tile(tile_x, tile_y, &mut buf);
 
                 for y in 0..16 {
-                    let actual_y = tile_y * 16 + y;
+                    let actual_y = self.size.y - (tile_y * 16 + y);                                             // Flip upside-down.
 
                     if actual_y >= self.size.y {
                         continue;
@@ -208,9 +208,10 @@ impl Renderer {
         let origin = self.view.transform_point(Point3::origin());
 
         for y in 0..16 {
+            let actual_y = tile_y * 16 + y;
+
             for x in 0..16 {
                 let actual_x = tile_x * 16 + x;
-                let actual_y = tile_y * 16 + y;
                 let uv = Point2::new(actual_x as f32, actual_y as f32);
 
                 let mut color = Vector3::zero();
@@ -220,8 +221,6 @@ impl Renderer {
                     let sample_uv = self.uvt.transform_point(uv + jitter) - Point2::origin();
                     let direction = self.pv.transform_vector(sample_uv.extend(0.1));                            // TODO: Don't hardcode near frustum distance.
                     let r = Ray::new(origin, direction);
-
-                    println!("r: {:?}", r);
 
                     color += world.sample(r, 0) / (self.num_samples as f32);
                 };
@@ -244,8 +243,8 @@ impl Renderer {
 }
 
 fn main() {
-    let width = 256;
-    let height = 256;
+    let width = 1920;
+    let height = 1080;
     let path = Path::new("rays.png");
 
     let world = World {
