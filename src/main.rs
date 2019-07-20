@@ -103,6 +103,7 @@ impl World {
 
         match curr_ixn {
             Some(ixn) if ixn.dist > 0.0001 => {
+                /*
                 let num_bounces = 4;
                 let mut color = Vector3::zero();
 
@@ -115,6 +116,9 @@ impl World {
                 };
 
                 color / num_bounces as f32
+                */
+
+                0.5 * (ixn.normal + Vector3::new(0.5, 0.5, 0.5))
             },
             _ => {
                 Vector3::new(0.6, 0.6, 0.6)
@@ -162,23 +166,23 @@ impl Renderer {
     fn render(&self, path: &Path) {
         let color_factor = 255.999;
         let mut pixels = vec![0; 3 * self.size.x * self.size.y];
-        let num_blocks_x = (self.size.x + 15) / 16;
-        let num_blocks_y = (self.size.y + 15) / 16;
+        let num_tiles_x = (self.size.x + 15) / 16;
+        let num_tiles_y = (self.size.y + 15) / 16;
 
-        for block_y in 0..num_blocks_y {
-            for block_x in 0..num_blocks_x {
+        for tile_y in 0..num_tiles_y {
+            for tile_x in 0..num_tiles_x {
                 let mut buf = [[Vector3::zero(); 16]; 16];
-                self.render_block(block_x, block_y, &mut buf);
+                self.render_tile(tile_x, tile_y, &mut buf);
 
                 for y in 0..16 {
-                    let actual_y = block_y * 16 + y;
+                    let actual_y = tile_y * 16 + y;
 
                     if actual_y >= self.size.y {
                         continue;
                     };
 
                     for x in 0..16 {
-                        let actual_x = block_x * 16 + x;
+                        let actual_x = tile_x * 16 + x;
 
                         if actual_x >= self.size.x {
                             continue;
@@ -199,13 +203,15 @@ impl Renderer {
         self.write_png(&path, &pixels);
     }
 
-    fn render_block(&self, block_x: usize, block_y: usize, buf: &mut [[Vector3<f32>; 16]; 16]) {
+    fn render_tile(&self, tile_x: usize, tile_y: usize, buf: &mut [[Vector3<f32>; 16]; 16]) {
         let world = &self.world;
         let origin = self.view.transform_point(Point3::origin());
 
         for y in 0..16 {
             for x in 0..16 {
-                let uv = Point2::new((block_x * 16 + x) as f32, (block_y * 16 + y) as f32);
+                let actual_x = tile_x * 16 + x;
+                let actual_y = tile_y * 16 + y;
+                let uv = Point2::new(actual_x as f32, actual_y as f32);
 
                 let mut color = Vector3::zero();
 
@@ -214,6 +220,8 @@ impl Renderer {
                     let sample_uv = self.uvt.transform_point(uv + jitter) - Point2::origin();
                     let direction = self.pv.transform_vector(sample_uv.extend(0.1));                            // TODO: Don't hardcode near frustum distance.
                     let r = Ray::new(origin, direction);
+
+                    println!("r: {:?}", r);
 
                     color += world.sample(r, 0) / (self.num_samples as f32);
                 };
@@ -236,12 +244,12 @@ impl Renderer {
 }
 
 fn main() {
-    let width = 1920;
-    let height = 1080;
+    let width = 256;
+    let height = 256;
     let path = Path::new("rays.png");
 
     let world = World {
-        origin: Point3::new(0.0, 0.0, 3.0),                             // FIXME: Origin doesn't work properly (currently, it's flipped in Z).
+        origin: Point3::new(0.0, 0.0, 3.0),                                                                     // FIXME: Origin doesn't work properly (currently, it's flipped in Z).
         look_at: Point3::new(0.0, 0.0, -5.0),
 
         spheres: vec![
