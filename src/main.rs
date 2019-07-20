@@ -7,7 +7,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
-use cgmath::{Matrix3, Matrix4, Point2, Point3, Vector3, Vector4};
+use cgmath::{Matrix3, Matrix4, Point2, Point3, Vector2, Vector3, Vector4};
 use png::HasParameters;
 use rand_distr::{Distribution, UnitSphere};
 
@@ -87,54 +87,6 @@ pub struct World {
 }
 
 impl World {
-    fn render(&self, width: usize, height: usize) -> Vec<u8> {
-        let num_samples = 4;
-        let color_factor = 255.999 / (num_samples as f32).sqrt();
-        let mut pixels = Vec::new();
-
-        let aspect = (width as f32) / (height as f32);
-        let uvt = Matrix3::new(
-            1.0 / width as f32, 0.0, 0.0,
-            0.0, 1.0 / height as f32, 0.0,
-            -0.5, -0.5, 1.0);
-
-        let persp = cgmath::frustum(-0.5, 0.5, aspect * -0.5, aspect * 0.5, 0.1, 100.0);
-        let view = Matrix4::look_at(self.origin, self.look_at, Vector3::new(0.0, 1.0, 0.0));
-
-        for y in (0..height).rev() {
-            for x in 0..width {
-                let uv = Point2::new(x as f32, y as f32);
-
-                let mut color = Vector3::zero();
-
-                for _ in 0..num_samples {
-                    let uvj = Vector3::new(
-                            uv.x + rand::random::<f32>() - 0.5,
-                            uv.y + rand::random::<f32>() - 0.5, 1.0);
-                    let sample_uv = uvt * uvj;
-                    let direction = (persp * view * Vector4::new(sample_uv.x, sample_uv.y, 0.0, 1.0)).truncate();
-
-                    let r = Ray {
-                        origin: self.origin,
-                        direction: direction.normalize(),
-                    };
-
-                    color += self.sample(r, 0);
-                };
-
-                let color = Vector3::new(
-                    color.x.sqrt() * color_factor,
-                    color.y.sqrt() * color_factor,
-                    color.z.sqrt() * color_factor);
-                pixels.push(color.x as u8);
-                pixels.push(color.y as u8);
-                pixels.push(color.z as u8);
-            };
-        };
-
-        pixels
-    }
-
     fn sample(&self, r: Ray, depth: usize) -> Vector3<f32> {
         let mut rng = rand::thread_rng();
 
@@ -171,15 +123,91 @@ impl World {
     }
 }
 
-fn write_png(path: &Path, data: &[u8], width: usize, height: usize) {
-    let file = File::create(path).unwrap();
-    let ref mut w = BufWriter::new(file);
+pub struct Renderer {
+    pub size: Vector2<usize>,
+    pub aspect: f32,
+    pub num_samples: usize,
 
-    let mut encoder = png::Encoder::new(w, width as u32, height as u32);
-    encoder.set(png::ColorType::RGB).set(png::BitDepth::Eight);
+    pub world: World,
 
-    let mut writer = encoder.write_header().unwrap();
-    writer.write_image_data(data).unwrap();
+    uvt: Matrix3<f32>,
+    persp: Matrix4<f32>,
+    view: Matrix4<f32>,
+    pv: Matrix4<f32>,
+}
+
+impl Renderer {
+    fn new(width: usize, height: usize, num_samples: usize, world: World) -> Renderer {
+        let aspect = (width as f32) / (height as f32);
+        let uvt = Matrix3::new(
+            1.0 / width as f32, 0.0, 0.0,
+            0.0, 1.0 / height as f32, 0.0,
+            -0.5, -0.5, 1.0);
+
+        let persp = cgmath::frustum(-0.5, 0.5, aspect * -0.5, aspect * 0.5, 0.1, 100.0);
+        let view = Matrix4::look_at(world.origin, world.look_at, Vector3::new(0.0, 1.0, 0.0));
+
+        Renderer {
+            size: Vector2::new(width, height),
+            aspect,
+            num_samples,
+            world,
+            uvt,
+            persp,
+            view,
+            pv: persp * view,
+        }
+    }
+
+    fn render(&self, path: &Path) {
+        let color_factor = 255.999 / (self.num_samples as f32).sqrt();
+        let world = &self.world;
+        let mut pixels = Vec::new();
+
+        for y in (0..self.size.y).rev() {
+            for x in 0..self.size.x {
+                let uv = Point2::new(x as f32, y as f32);
+
+                let mut color = Vector3::zero();
+
+                for _ in 0..self.num_samples {
+                    let uvj = Vector3::new(
+                            uv.x + rand::random::<f32>() - 0.5,
+                            uv.y + rand::random::<f32>() - 0.5, 1.0);
+                    let sample_uv = self.uvt * uvj;
+                    let direction = (self.pv * Vector4::new(sample_uv.x, sample_uv.y, 0.0, 1.0)).truncate();
+
+                    let r = Ray {
+                        origin: world.origin,
+                        direction: direction.normalize(),
+                    };
+
+                    color += world.sample(r, 0);
+                };
+
+                let color = Vector3::new(
+                    color.x.sqrt() * color_factor,
+                    color.y.sqrt() * color_factor,
+                    color.z.sqrt() * color_factor);
+                pixels.push(color.x as u8);
+                pixels.push(color.y as u8);
+                pixels.push(color.z as u8);
+            };
+        };
+
+        self.write_png(&path, &pixels);
+    }
+
+    fn write_png(&self, path: &Path, data: &[u8]) {
+        let file = File::create(path).unwrap();
+        let ref mut w = BufWriter::new(file);
+
+        let mut encoder = png::Encoder::new(w, self.size.x as u32, self.size.y as u32);
+        encoder.set(png::ColorType::RGB).set(png::BitDepth::Eight);
+
+        let mut writer = encoder.write_header().unwrap();
+        writer.write_image_data(data).unwrap();
+    }
 }
 
 fn main() {
@@ -204,7 +232,6 @@ fn main() {
             },
         ],
     };
-    let data = world.render(width, height);
-
-    write_png(&path, &data, width, height);
+    let renderer = Renderer::new(width, height, 4, world);
+    renderer.render(&path);
 }
