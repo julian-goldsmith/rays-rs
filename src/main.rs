@@ -24,6 +24,13 @@ pub struct Ray {
 }
 
 impl Ray {
+    pub fn new(origin: Point3<f32>, direction: Vector3<f32>) -> Ray {
+        Ray {
+            origin,
+            direction: direction.normalize(),
+        }
+    }
+
     pub fn point_at_distance(&self, dist: f32) -> Point3<f32> {
         self.origin + self.direction * dist
     }
@@ -104,11 +111,8 @@ impl World {
                 let mut color = Vector3::zero();
 
                 for _ in 0..num_bounces {
-                    let jitter = Vector3::<f32>::from(UnitSphere.sample(&mut rng)) * 0.5;
-                    let tr = Ray {
-                        origin: ixn.pos,
-                        direction: (ixn.normal + jitter - Vector3::new(0.5, 0.5, 0.5)).normalize(),
-                    };
+                    let jitter = (Vector3::from(UnitSphere.sample(&mut rng)) - Vector3::new(0.5, 0.5, 0.5)) * 0.5;
+                    let tr = Ray::new(ixn.pos, ixn.normal + jitter);
 
                     let bounce_sample = self.sample(tr, depth + 1);
                     color += ixn.color.mul_element_wise(bounce_sample);
@@ -131,7 +135,7 @@ pub struct Renderer {
     pub world: World,
 
     uvt: Matrix3<f32>,
-    persp: Matrix4<f32>,
+    #[allow(dead_code)] persp: Matrix4<f32>,
     view: Matrix4<f32>,
     pv: Matrix4<f32>,
 }
@@ -160,7 +164,7 @@ impl Renderer {
     }
 
     fn render(&self, path: &Path) {
-        let color_factor = 255.999 / (self.num_samples as f32).sqrt();
+        let color_factor = 255.999 / (self.num_samples as f32).sqrt();                                          // sqrt due to gamma.
         let world = &self.world;
         let mut pixels = Vec::new();
 
@@ -171,16 +175,11 @@ impl Renderer {
                 let mut color = Vector3::zero();
 
                 for _ in 0..self.num_samples {
-                    let uvj = Vector3::new(
-                            uv.x + rand::random::<f32>() - 0.5,
-                            uv.y + rand::random::<f32>() - 0.5, 1.0);
-                    let sample_uv = self.uvt * uvj;
-                    let direction = (self.pv * Vector4::new(sample_uv.x, sample_uv.y, 0.0, 1.0)).truncate();
-
-                    let r = Ray {
-                        origin: world.origin,
-                        direction: direction.normalize(),
-                    };
+                    let jitter = Vector2::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5);
+                    let sample_uv = self.uvt.transform_point(uv + jitter) - Point2::origin();
+                    let direction = self.pv.transform_vector(sample_uv.extend(0.1));                            // TODO: Don't hardcode near frustum distance.
+                    let origin = self.view.transform_point(Point3::origin());
+                    let r = Ray::new(origin, direction);
 
                     color += world.sample(r, 0);
                 };
@@ -217,7 +216,7 @@ fn main() {
 
     let world = World {
         origin: Point3::new(0.0, 0.0, 0.0),                             // FIXME: Origin doesn't work properly.
-        look_at: Point3::new(0.0, 0.0, -10.0),
+        look_at: Point3::new(0.0, 0.0, -5.0),
 
         spheres: vec![
             Sphere {
