@@ -160,13 +160,40 @@ impl Renderer {
     }
 
     fn render(&self, path: &Path) {
-        let color_factor = 255.999 / (self.num_samples as f32).sqrt();                                          // sqrt due to gamma.
-        let world = &self.world;
-        let mut pixels = Vec::new();
+        let color_factor = 255.999;
+        let mut pixels = vec![0; 3 * self.size.x * self.size.y];
 
-        for y in (0..self.size.y).rev() {
-            for x in 0..self.size.x {
-                let uv = Point2::new(x as f32, y as f32);
+        for block_y in 0..(self.size.y / 16) {
+            for block_x in 0..(self.size.x / 16) {
+                let mut buf = [[Vector3::zero(); 16]; 16];
+                self.render_block(block_x, block_y, &mut buf);
+
+                for y in 0..16 {
+                    for x in 0..16 {
+                        let color = buf[y][x] * color_factor;
+
+                        let actual_x = block_x * 16 + x;
+                        let actual_y = block_y * 16 + y;
+                        let pixel_base = 3 * (actual_y * self.size.x + actual_x);
+
+                        pixels[pixel_base + 0] = color.x as u8;
+                        pixels[pixel_base + 1] = color.y as u8;
+                        pixels[pixel_base + 2] = color.z as u8;
+                    };
+                };
+            };
+        };
+
+        self.write_png(&path, &pixels);
+    }
+
+    fn render_block(&self, block_x: usize, block_y: usize, buf: &mut [[Vector3<f32>; 16]; 16]) {
+        let world = &self.world;
+        let origin = self.view.transform_point(Point3::origin());
+
+        for y in 0..16 {
+            for x in 0..16 {
+                let uv = Point2::new((block_x * 16 + x) as f32, (block_y * 16 + y) as f32);
 
                 let mut color = Vector3::zero();
 
@@ -174,23 +201,14 @@ impl Renderer {
                     let jitter = Vector2::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5);
                     let sample_uv = self.uvt.transform_point(uv + jitter) - Point2::origin();
                     let direction = self.pv.transform_vector(sample_uv.extend(0.1));                            // TODO: Don't hardcode near frustum distance.
-                    let origin = self.view.transform_point(Point3::origin());
                     let r = Ray::new(origin, direction);
 
-                    color += world.sample(r, 0);
+                    color += world.sample(r, 0) / (self.num_samples as f32);
                 };
 
-                let color = Vector3::new(
-                    color.x.sqrt() * color_factor,
-                    color.y.sqrt() * color_factor,
-                    color.z.sqrt() * color_factor);
-                pixels.push(color.x as u8);
-                pixels.push(color.y as u8);
-                pixels.push(color.z as u8);
+                buf[y][x] = Vector3::new(color.x.sqrt(), color.y.sqrt(), color.z.sqrt());                       // Apply gamma.
             };
         };
-
-        self.write_png(&path, &pixels);
     }
 
     fn write_png(&self, path: &Path, data: &[u8]) {
