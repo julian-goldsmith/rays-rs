@@ -7,7 +7,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
-use cgmath::{Matrix3, Matrix4, Point2, Point3, Vector2, Vector3, Vector4};
+use cgmath::{Matrix3, Matrix4, Point2, Point3, Vector2, Vector3};
 use png::HasParameters;
 use rand_distr::{Distribution, UnitSphere};
 
@@ -68,18 +68,14 @@ impl Intersect for Sphere {
                 b - discriminant.sqrt()
             };
 
-            if dist > 0.0001 {
-                let pos = r.point_at_distance(dist);
+            let pos = r.point_at_distance(dist);
 
-                Some(Intersection {
-                    pos,
-                    dist,
-                    normal: (pos - self.center).normalize(),
-                    color: self.color,
-                })
-            } else {
-                None
-            }
+            Some(Intersection {
+                pos,
+                dist,
+                normal: (pos - self.center).normalize(),
+                color: self.color,
+            })
         } else {
             None
         }
@@ -215,7 +211,7 @@ fn main() {
     let path = Path::new("rays.png");
 
     let world = World {
-        origin: Point3::new(0.0, 0.0, 0.0),                             // FIXME: Origin doesn't work properly.
+        origin: Point3::new(0.0, 0.0, 3.0),                             // FIXME: Origin doesn't work properly (currently, it's flipped in Z).
         look_at: Point3::new(0.0, 0.0, -5.0),
 
         spheres: vec![
