@@ -162,18 +162,30 @@ impl Renderer {
     fn render(&self, path: &Path) {
         let color_factor = 255.999;
         let mut pixels = vec![0; 3 * self.size.x * self.size.y];
+        let num_blocks_x = (self.size.x + 15) / 16;
+        let num_blocks_y = (self.size.y + 15) / 16;
 
-        for block_y in 0..(self.size.y / 16) {
-            for block_x in 0..(self.size.x / 16) {
+        for block_y in 0..num_blocks_y {
+            for block_x in 0..num_blocks_x {
                 let mut buf = [[Vector3::zero(); 16]; 16];
                 self.render_block(block_x, block_y, &mut buf);
 
                 for y in 0..16 {
+                    let actual_y = block_y * 16 + y;
+
+                    if actual_y >= self.size.y {
+                        continue;
+                    };
+
                     for x in 0..16 {
+                        let actual_x = block_x * 16 + x;
+
+                        if actual_x >= self.size.x {
+                            continue;
+                        };
+
                         let color = buf[y][x] * color_factor;
 
-                        let actual_x = block_x * 16 + x;
-                        let actual_y = block_y * 16 + y;
                         let pixel_base = 3 * (actual_y * self.size.x + actual_x);
 
                         pixels[pixel_base + 0] = color.x as u8;
