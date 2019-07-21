@@ -139,6 +139,43 @@ impl RenderCanvas {
             pixels: vec![0; 3 * width * height].into_boxed_slice(),
         }
     }
+
+    #[inline]
+    pub fn set_pixel(&mut self, x: usize, y: usize, color: Vector3<f32>) {
+        let value = color * 255.999;
+        let pixel_base = 3 * (y * self.size.x + x);
+        self.pixels[pixel_base + 0] = value.x as u8;
+        self.pixels[pixel_base + 1] = value.y as u8;
+        self.pixels[pixel_base + 2] = value.z as u8;
+    }
+
+    pub fn fill_tile(&mut self, tile_x: usize, tile_y: usize, tile: &[[Vector3<f32>; 16]; 16]) {
+        let tile_size_x = tile[0].len();
+        let tile_size_y = tile.len();
+        let canvas_x_base = tile_x * tile_size_x;
+        let canvas_y_base = tile_y * tile_size_y;
+
+        for y in 0..tile.len() {
+            let row = tile[y];
+            let canvas_y = self.size.y - (canvas_y_base + y);                                                   // Flip upside-down.
+
+            // We need this in case the canvas height isn't divisible by 16.
+            if canvas_y >= self.size.y {
+                continue;
+            };
+
+            for x in 0..row.len() {
+                let canvas_x = canvas_x_base + x;
+
+                // We need this in case the canvas width isn't divisible by 16.
+                if canvas_x >= self.size.x {
+                    continue;
+                };
+
+                self.set_pixel(canvas_x, canvas_y, row[x]);
+            };
+        };
+    }
 }
 
 pub struct Renderer {
@@ -179,46 +216,21 @@ impl Renderer {
 
     fn render(&mut self, path: &Path) {
         let size = self.canvas.size;
-        let color_factor = 255.999;
         let num_tiles_x = (size.x + 15) / 16;
         let num_tiles_y = (size.y + 15) / 16;
 
         for tile_y in 0..num_tiles_y {
             for tile_x in 0..num_tiles_x {
-                let mut buf = [[Vector3::zero(); 16]; 16];
-                self.render_tile(tile_x, tile_y, &mut buf);
-
-                let pixels = &mut self.canvas.pixels;
-                for y in 0..16 {
-                    let actual_y = size.y - (tile_y * 16 + y);                                                  // Flip upside-down.
-
-                    if actual_y >= size.y {
-                        continue;
-                    };
-
-                    for x in 0..16 {
-                        let actual_x = tile_x * 16 + x;
-
-                        if actual_x >= size.x {
-                            continue;
-                        };
-
-                        let color = buf[y][x] * color_factor;
-
-                        let pixel_base = 3 * (actual_y * size.x + actual_x);
-
-                        pixels[pixel_base + 0] = color.x as u8;
-                        pixels[pixel_base + 1] = color.y as u8;
-                        pixels[pixel_base + 2] = color.z as u8;
-                    };
-                };
+                let mut tile = [[Vector3::zero(); 16]; 16];
+                self.render_tile(tile_x, tile_y, &mut tile);
+                self.canvas.fill_tile(tile_x, tile_y, &tile);
             };
         };
 
         self.write_png(&path);
     }
 
-    fn render_tile(&self, tile_x: usize, tile_y: usize, buf: &mut [[Vector3<f32>; 16]; 16]) {
+    fn render_tile(&self, tile_x: usize, tile_y: usize, tile: &mut [[Vector3<f32>; 16]; 16]) {
         let world = &self.world;
         let origin = self.view.transform_point(Point3::origin());
 
@@ -240,7 +252,7 @@ impl Renderer {
                     color += world.sample(r, 0) / (self.num_samples as f32);
                 };
 
-                buf[y][x] = Vector3::new(color.x.sqrt(), color.y.sqrt(), color.z.sqrt());                       // Apply gamma.
+                tile[y][x] = Vector3::new(color.x.sqrt(), color.y.sqrt(), color.z.sqrt());                      // Apply gamma.
             };
         };
     }
@@ -280,6 +292,7 @@ fn main() {
             },
         ],
     };
+
     let mut renderer = Renderer::new(width, height, 4, world);
     renderer.render(&path);
 }
