@@ -149,25 +149,23 @@ impl RenderCanvas {
         self.pixels[pixel_base + 2] = (value.z * 255.999) as u8;
     }
 
-    pub fn fill_tile(&mut self, tile_x: usize, tile_y: usize, tile: &[[Vector3<f32>; 16]; 16]) {
-        let tile_size_x = tile[0].len();
-        let tile_size_y = tile.len();
-        let canvas_x_base = tile_x * tile_size_x;
-        let canvas_y_base = tile_y * tile_size_y;
+    pub fn fill_tile(&mut self, tile: &Tile) {
+        let canvas_x_base = tile.x * Tile::SIZE;
+        let canvas_y_base = tile.y * Tile::SIZE;
 
-        for y in 0..tile.len() {
-            let row = tile[y];
+        for y in 0..Tile::SIZE {
+            let row = tile.pixels[y];
             let canvas_y = self.size.y - (canvas_y_base + y);                                                   // Flip upside-down.
 
-            // We need this in case the canvas height isn't divisible by 16.
+            // We need this in case the canvas height isn't divisible by the tile size.
             if canvas_y >= self.size.y {
                 continue;
             };
 
-            for x in 0..row.len() {
+            for x in 0..Tile::SIZE {
                 let canvas_x = canvas_x_base + x;
 
-                // We need this in case the canvas width isn't divisible by 16.
+                // We need this in case the canvas width isn't divisible by the tile size.
                 if canvas_x >= self.size.x {
                     continue;
                 };
@@ -175,6 +173,24 @@ impl RenderCanvas {
                 self.set_pixel(canvas_x, canvas_y, row[x]);
             };
         };
+    }
+}
+
+pub struct Tile {
+    pub x: usize,
+    pub y: usize,
+    pub pixels: [[Vector3<f32>; Tile::SIZE]; Tile::SIZE],
+}
+
+impl Tile {
+    pub const SIZE: usize = 16;
+
+    pub fn new(x: usize, y: usize) -> Tile {
+        Tile {
+            x,
+            y,
+            pixels: [[Vector3::zero(); Tile::SIZE]; Tile::SIZE],
+        }
     }
 }
 
@@ -216,32 +232,31 @@ impl Renderer {
 
     fn render(&mut self, path: &Path) {
         let size = self.canvas.size;
-        let num_tiles_x = (size.x + 15) / 16;
-        let num_tiles_y = (size.y + 15) / 16;
+        let num_tiles_x = (size.x + Tile::SIZE - 1) / Tile::SIZE;
+        let num_tiles_y = (size.y + Tile::SIZE - 1) / Tile::SIZE;
 
         for tile_y in 0..num_tiles_y {
             for tile_x in 0..num_tiles_x {
-                let mut tile = [[Vector3::zero(); 16]; 16];
-                self.render_tile(tile_x, tile_y, &mut tile);
-                self.canvas.fill_tile(tile_x, tile_y, &tile);
+                let mut tile = Tile::new(tile_x, tile_y);
+                self.render_tile(&mut tile);
+                self.canvas.fill_tile(&tile);
             };
         };
 
         self.write_png(&path);
     }
 
-    fn render_tile(&self, tile_x: usize, tile_y: usize, tile: &mut [[Vector3<f32>; 16]; 16]) {
+    fn render_tile(&self, tile: &mut Tile) {
         let world = &self.world;
         let origin = self.view.transform_point(Point3::origin());
 
-        for y in 0..16 {
-            let actual_y = tile_y * 16 + y;
+        for y in 0..Tile::SIZE {
+            let canvas_y = tile.y * Tile::SIZE + y;
 
-            for x in 0..16 {
-                let actual_x = tile_x * 16 + x;
-                let uv = Point2::new(actual_x as f32, actual_y as f32);
-
-                let color = &mut tile[y][x];
+            for x in 0..Tile::SIZE {
+                let canvas_x = tile.x * Tile::SIZE + x;
+                let uv = Point2::new(canvas_x as f32, canvas_y as f32);
+                let color = &mut tile.pixels[y][x];
 
                 for _ in 0..self.num_samples {
                     let jitter = Vector2::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5);
