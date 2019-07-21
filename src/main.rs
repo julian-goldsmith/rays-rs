@@ -127,8 +127,22 @@ impl World {
     }
 }
 
-pub struct Renderer {
+pub struct RenderCanvas {
     pub size: Vector2<usize>,
+    pub pixels: Box<[u8]>,
+}
+
+impl RenderCanvas {
+    pub fn new(width: usize, height: usize) -> RenderCanvas {
+        RenderCanvas {
+            size: Vector2::new(width, height),
+            pixels: vec![0; 3 * width * height].into_boxed_slice(),
+        }
+    }
+}
+
+pub struct Renderer {
+    pub canvas: RenderCanvas,
     pub aspect: f32,
     pub num_samples: usize,
 
@@ -152,7 +166,7 @@ impl Renderer {
         let view = Matrix4::look_at(world.origin, world.look_at, Vector3::new(0.0, 1.0, 0.0));
 
         Renderer {
-            size: Vector2::new(width, height),
+            canvas: RenderCanvas::new(width, height),
             aspect,
             num_samples,
             world,
@@ -163,34 +177,35 @@ impl Renderer {
         }
     }
 
-    fn render(&self, path: &Path) {
+    fn render(&mut self, path: &Path) {
+        let size = self.canvas.size;
         let color_factor = 255.999;
-        let mut pixels = vec![0; 3 * self.size.x * self.size.y];
-        let num_tiles_x = (self.size.x + 15) / 16;
-        let num_tiles_y = (self.size.y + 15) / 16;
+        let num_tiles_x = (size.x + 15) / 16;
+        let num_tiles_y = (size.y + 15) / 16;
 
         for tile_y in 0..num_tiles_y {
             for tile_x in 0..num_tiles_x {
                 let mut buf = [[Vector3::zero(); 16]; 16];
                 self.render_tile(tile_x, tile_y, &mut buf);
 
+                let pixels = &mut self.canvas.pixels;
                 for y in 0..16 {
-                    let actual_y = self.size.y - (tile_y * 16 + y);                                             // Flip upside-down.
+                    let actual_y = size.y - (tile_y * 16 + y);                                                  // Flip upside-down.
 
-                    if actual_y >= self.size.y {
+                    if actual_y >= size.y {
                         continue;
                     };
 
                     for x in 0..16 {
                         let actual_x = tile_x * 16 + x;
 
-                        if actual_x >= self.size.x {
+                        if actual_x >= size.x {
                             continue;
                         };
 
                         let color = buf[y][x] * color_factor;
 
-                        let pixel_base = 3 * (actual_y * self.size.x + actual_x);
+                        let pixel_base = 3 * (actual_y * size.x + actual_x);
 
                         pixels[pixel_base + 0] = color.x as u8;
                         pixels[pixel_base + 1] = color.y as u8;
@@ -200,7 +215,7 @@ impl Renderer {
             };
         };
 
-        self.write_png(&path, &pixels);
+        self.write_png(&path);
     }
 
     fn render_tile(&self, tile_x: usize, tile_y: usize, buf: &mut [[Vector3<f32>; 16]; 16]) {
@@ -230,15 +245,16 @@ impl Renderer {
         };
     }
 
-    fn write_png(&self, path: &Path, data: &[u8]) {
+    fn write_png(&self, path: &Path) {
         let file = File::create(path).unwrap();
         let ref mut w = BufWriter::new(file);
 
-        let mut encoder = png::Encoder::new(w, self.size.x as u32, self.size.y as u32);
+        let size = self.canvas.size;
+        let mut encoder = png::Encoder::new(w, size.x as u32, size.y as u32);
         encoder.set(png::ColorType::RGB).set(png::BitDepth::Eight);
 
         let mut writer = encoder.write_header().unwrap();
-        writer.write_image_data(data).unwrap();
+        writer.write_image_data(&self.canvas.pixels).unwrap();
     }
 }
 
@@ -264,6 +280,6 @@ fn main() {
             },
         ],
     };
-    let renderer = Renderer::new(width, height, 4, world);
+    let mut renderer = Renderer::new(width, height, 4, world);
     renderer.render(&path);
 }
