@@ -142,11 +142,11 @@ impl RenderCanvas {
 
     #[inline]
     pub fn set_pixel(&mut self, x: usize, y: usize, color: Vector3<f32>) {
-        let value = color * 255.999;
+        let value = Vector3::new(color.x.sqrt(), color.y.sqrt(), color.z.sqrt());                               // Apply gamma.
         let pixel_base = 3 * (y * self.size.x + x);
-        self.pixels[pixel_base + 0] = value.x as u8;
-        self.pixels[pixel_base + 1] = value.y as u8;
-        self.pixels[pixel_base + 2] = value.z as u8;
+        self.pixels[pixel_base + 0] = (value.x * 255.999) as u8;
+        self.pixels[pixel_base + 1] = (value.y * 255.999) as u8;
+        self.pixels[pixel_base + 2] = (value.z * 255.999) as u8;
     }
 
     pub fn fill_tile(&mut self, tile_x: usize, tile_y: usize, tile: &[[Vector3<f32>; 16]; 16]) {
@@ -241,7 +241,7 @@ impl Renderer {
                 let actual_x = tile_x * 16 + x;
                 let uv = Point2::new(actual_x as f32, actual_y as f32);
 
-                let mut color = Vector3::zero();
+                let color = &mut tile[y][x];
 
                 for _ in 0..self.num_samples {
                     let jitter = Vector2::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5);
@@ -249,10 +249,8 @@ impl Renderer {
                     let direction = self.pv.transform_vector(sample_uv.extend(0.1));                            // TODO: Don't hardcode near frustum distance.
                     let r = Ray::new(origin, direction);
 
-                    color += world.sample(r, 0) / (self.num_samples as f32);
+                    *color += world.sample(r, 0) / (self.num_samples as f32);
                 };
-
-                tile[y][x] = Vector3::new(color.x.sqrt(), color.y.sqrt(), color.z.sqrt());                      // Apply gamma.
             };
         };
     }
