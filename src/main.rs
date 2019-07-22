@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use cgmath::prelude::*;
 use cgmath::{Matrix3, Matrix4, Point2, Point3, Vector2, Vector3};
+use cgmath::num_traits::NumCast;
 use png::HasParameters;
 use rand_distr::{Distribution, UnitSphere};
 
@@ -127,6 +128,28 @@ impl World {
     }
 }
 
+pub struct Tile {
+    pub canvas_base: Point2<f32>,
+    pub pos: Vector2<f32>,
+    pub pixels: [[Vector3<f32>; Tile::SIZE]; Tile::SIZE],
+}
+
+impl Tile {
+    pub const SIZE: usize = 16;
+
+    pub fn new(x: usize, y: usize) -> Tile {
+        Tile {
+            pos: Vector2::new(x as f32, y as f32),
+            pixels: [[Vector3::zero(); Tile::SIZE]; Tile::SIZE],
+            canvas_base: Point2::new((x * Tile::SIZE) as f32, (y * Tile::SIZE) as f32),
+        }
+    }
+
+    pub fn get_canvas_pos<TI: Copy + NumCast, TO: NumCast>(&self, pos: Vector2<TI>) -> Point2<TO> {
+        (self.canvas_base + pos.cast().unwrap()).cast().unwrap()
+    }
+}
+
 pub struct RenderCanvas {
     pub size: Vector2<usize>,
     pub pixels: Box<[u8]>,
@@ -150,47 +173,34 @@ impl RenderCanvas {
     }
 
     pub fn fill_tile(&mut self, tile: &Tile) {
-        let canvas_x_base = tile.x * Tile::SIZE;
-        let canvas_y_base = tile.y * Tile::SIZE;
-
         for y in 0..Tile::SIZE {
             let row = tile.pixels[y];
-            let canvas_y = self.size.y - (canvas_y_base + y);                                                   // Flip upside-down.
-
-            // We need this in case the canvas height isn't divisible by the tile size.
-            if canvas_y >= self.size.y {
-                continue;
-            };
 
             for x in 0..Tile::SIZE {
-                let canvas_x = canvas_x_base + x;
+                let tile_pos = Vector2::new(x, y);
+                let canvas_pos = tile.get_canvas_pos(tile_pos);
+                let canvas_y = self.size.y - canvas_pos.y;                                                      // Flip upside-down.
 
-                // We need this in case the canvas width isn't divisible by the tile size.
-                if canvas_x >= self.size.x {
+                // We need this in case the canvas width or height isn't divisible by the tile size.
+                if canvas_pos.x >= self.size.x || canvas_y >= self.size.y {
                     continue;
                 };
 
-                self.set_pixel(canvas_x, canvas_y, row[x]);
+                self.set_pixel(canvas_pos.x, canvas_y, row[x]);
             };
         };
     }
-}
 
-pub struct Tile {
-    pub x: usize,
-    pub y: usize,
-    pub pixels: [[Vector3<f32>; Tile::SIZE]; Tile::SIZE],
-}
+    fn write_png(&self, path: &Path) {
+        let file = File::create(path).unwrap();
+        let ref mut w = BufWriter::new(file);
 
-impl Tile {
-    pub const SIZE: usize = 16;
+        let size = self.size;
+        let mut encoder = png::Encoder::new(w, size.x as u32, size.y as u32);
+        encoder.set(png::ColorType::RGB).set(png::BitDepth::Eight);
 
-    pub fn new(x: usize, y: usize) -> Tile {
-        Tile {
-            x,
-            y,
-            pixels: [[Vector3::zero(); Tile::SIZE]; Tile::SIZE],
-        }
+        let mut writer = encoder.write_header().unwrap();
+        writer.write_image_data(&self.pixels).unwrap();
     }
 }
 
@@ -201,8 +211,6 @@ pub struct Renderer {
 
     pub world: World,
 
-    uvt: Matrix3<f32>,
-    #[allow(dead_code)] persp: Matrix4<f32>,
     view: Matrix4<f32>,
     pv: Matrix4<f32>,
 }
@@ -210,10 +218,6 @@ pub struct Renderer {
 impl Renderer {
     fn new(width: usize, height: usize, num_samples: usize, world: World) -> Renderer {
         let aspect = (width as f32) / (height as f32);
-        let uvt = Matrix3::new(
-            1.0 / width as f32, 0.0, 0.0,
-            0.0, 1.0 / height as f32, 0.0,
-            -0.5, -0.5, 1.0);
 
         let persp = cgmath::frustum(-0.5, 0.5, aspect * -0.5, aspect * 0.5, 0.1, 100.0);
         let view = Matrix4::look_at(world.origin, world.look_at, Vector3::new(0.0, 1.0, 0.0));
@@ -223,8 +227,6 @@ impl Renderer {
             aspect,
             num_samples,
             world,
-            uvt,
-            persp,
             view,
             pv: persp * view,
         }
@@ -243,51 +245,42 @@ impl Renderer {
             };
         };
 
-        self.write_png(&path);
+        self.canvas.write_png(&path);
     }
 
     fn render_tile(&self, tile: &mut Tile) {
         let world = &self.world;
         let origin = self.view.transform_point(Point3::origin());
+        let inv_size = 1.0 / self.canvas.size.cast::<f32>().unwrap();
+
+        let uvt = Matrix3::new(
+            inv_size.x, 0.0, 0.0,
+            0.0, inv_size.y, 0.0,
+            tile.canvas_base.x * inv_size.x - 0.5,
+            tile.canvas_base.y * inv_size.y - 0.5, 1.0);
 
         for y in 0..Tile::SIZE {
-            let canvas_y = tile.y * Tile::SIZE + y;
-
             for x in 0..Tile::SIZE {
-                let canvas_x = tile.x * Tile::SIZE + x;
-                let uv = Point2::new(canvas_x as f32, canvas_y as f32);
+                let tile_pos = Point2::new(x, y);
+                let uv = tile_pos.cast().unwrap();
                 let color = &mut tile.pixels[y][x];
 
                 for _ in 0..self.num_samples {
                     let jitter = Vector2::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5);
-                    let sample_uv = self.uvt.transform_point(uv + jitter) - Point2::origin();
+                    let sample_uv = uvt.transform_point(uv + jitter) - Point2::origin();
                     let direction = self.pv.transform_vector(sample_uv.extend(0.1));                            // TODO: Don't hardcode near frustum distance.
                     let r = Ray::new(origin, direction);
 
-                    *color += world.sample(r, 0) / (self.num_samples as f32);
+                    *color += world.sample(r, 0);
                 };
+
+                *color /= self.num_samples as f32;
             };
         };
-    }
-
-    fn write_png(&self, path: &Path) {
-        let file = File::create(path).unwrap();
-        let ref mut w = BufWriter::new(file);
-
-        let size = self.canvas.size;
-        let mut encoder = png::Encoder::new(w, size.x as u32, size.y as u32);
-        encoder.set(png::ColorType::RGB).set(png::BitDepth::Eight);
-
-        let mut writer = encoder.write_header().unwrap();
-        writer.write_image_data(&self.canvas.pixels).unwrap();
     }
 }
 
 fn main() {
-    let width = 1920;
-    let height = 1080;
-    let path = Path::new("rays.png");
-
     let world = World {
         origin: Point3::new(0.0, 0.0, 3.0),                                                                     // FIXME: Origin doesn't work properly (currently, it's flipped in Z).
         look_at: Point3::new(0.0, 0.0, -5.0),
@@ -306,6 +299,6 @@ fn main() {
         ],
     };
 
-    let mut renderer = Renderer::new(width, height, 4, world);
-    renderer.render(&path);
+    let mut renderer = Renderer::new(1920, 1080, 4, world);
+    renderer.render(&Path::new("rays.png"));
 }
