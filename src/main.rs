@@ -3,9 +3,11 @@ extern crate png;
 extern crate rand;
 extern crate rand_distr;
 
-use std::path::Path;
+use std::borrow::Borrow;
 use std::fs::File;
 use std::io::BufWriter;
+use std::path::Path;
+use std::sync::Arc;
 use std::thread;
 use cgmath::prelude::*;
 use cgmath::{Matrix3, Matrix4, Point2, Point3, Vector2, Vector3};
@@ -211,7 +213,7 @@ pub struct Renderer {
     pub aspect: f32,
     pub num_samples: usize,
 
-    pub world: World,
+    pub world: Arc<World>,
 
     view: Matrix4<f32>,
     pv: Matrix4<f32>,
@@ -228,7 +230,7 @@ impl Renderer {
             canvas: RenderCanvas::new(width, height),
             aspect,
             num_samples,
-            world,
+            world: Arc::new(world),
             view,
             pv: persp * view,
         }
@@ -263,10 +265,11 @@ impl Renderer {
         self.canvas.write_png(&path);
     }
 
-    fn render_tile(world: World, origin: Point3<f32>, canvas_size: Vector2<f32>, pv: Matrix4<f32>,
+    fn render_tile(world: Arc<World>, origin: Point3<f32>, canvas_size: Vector2<f32>, pv: Matrix4<f32>,
                    num_samples: usize, tile_x: usize, tile_y: usize) -> Tile {
         let mut tile = Tile::new(tile_x, tile_y);
         let inv_size = 1.0 / canvas_size;
+        let world: &World = world.borrow();
 
         let uvt = Matrix3::new(
             inv_size.x, 0.0, 0.0,
