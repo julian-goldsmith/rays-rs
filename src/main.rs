@@ -6,6 +6,7 @@ extern crate rand_distr;
 use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
+use std::thread;
 use cgmath::prelude::*;
 use cgmath::{Matrix3, Matrix4, Point2, Point3, Vector2, Vector3};
 use cgmath::num_traits::NumCast;
@@ -87,6 +88,7 @@ impl Intersect for Sphere {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct World {
     pub origin: Point3<f32>,
     pub look_at: Point3<f32>,
@@ -233,25 +235,38 @@ impl Renderer {
     }
 
     fn render(&mut self, path: &Path) {
+        let origin = self.view.transform_point(Point3::origin());
+        let canvas_size = self.canvas.size.cast::<f32>().unwrap();
+        let pv = self.pv;
+        let num_samples = self.num_samples;
         let size = self.canvas.size;
         let num_tiles_x = (size.x + Tile::SIZE - 1) / Tile::SIZE;
         let num_tiles_y = (size.y + Tile::SIZE - 1) / Tile::SIZE;
+        let mut handles = Vec::new();
 
         for tile_y in 0..num_tiles_y {
             for tile_x in 0..num_tiles_x {
-                let mut tile = Tile::new(tile_x, tile_y);
-                self.render_tile(&mut tile);
-                self.canvas.fill_tile(&tile);
+                let world = self.world.clone();
+                let handle = thread::spawn(move || {
+                    Renderer::render_tile(world.clone(), origin, canvas_size, pv,
+                                          num_samples, tile_x, tile_y)
+                });
+                handles.push(handle);
             };
+        };
+
+        for handle in handles {
+            let tile = handle.join().unwrap();
+            self.canvas.fill_tile(&tile);
         };
 
         self.canvas.write_png(&path);
     }
 
-    fn render_tile(&self, tile: &mut Tile) {
-        let world = &self.world;
-        let origin = self.view.transform_point(Point3::origin());
-        let inv_size = 1.0 / self.canvas.size.cast::<f32>().unwrap();
+    fn render_tile(world: World, origin: Point3<f32>, canvas_size: Vector2<f32>, pv: Matrix4<f32>,
+                   num_samples: usize, tile_x: usize, tile_y: usize) -> Tile {
+        let mut tile = Tile::new(tile_x, tile_y);
+        let inv_size = 1.0 / canvas_size;
 
         let uvt = Matrix3::new(
             inv_size.x, 0.0, 0.0,
@@ -265,18 +280,20 @@ impl Renderer {
                 let uv = tile_pos.cast().unwrap();
                 let color = &mut tile.pixels[y][x];
 
-                for _ in 0..self.num_samples {
+                for _ in 0..num_samples {
                     let jitter = Vector2::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5);
                     let sample_uv = uvt.transform_point(uv + jitter) - Point2::origin();
-                    let direction = self.pv.transform_vector(sample_uv.extend(0.1));                            // TODO: Don't hardcode near frustum distance.
+                    let direction = pv.transform_vector(sample_uv.extend(0.1));                                 // TODO: Don't hardcode near frustum distance.
                     let r = Ray::new(origin, direction);
 
                     *color += world.sample(r, 0);
                 };
 
-                *color /= self.num_samples as f32;
+                *color /= num_samples as f32;
             };
         };
+
+        tile
     }
 }
 
@@ -299,6 +316,6 @@ fn main() {
         ],
     };
 
-    let mut renderer = Renderer::new(1920, 1080, 4, world);
+    let mut renderer = Renderer::new(1920, 1080, 16, world);
     renderer.render(&Path::new("rays.png"));
 }
