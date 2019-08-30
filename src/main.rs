@@ -60,32 +60,50 @@ pub struct Triangle {
 }
 
 impl Intersect for Triangle {
+    // http://www.lighthouse3d.com/tutorials/maths/ray-triangle-intersection/
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let edge1 = self.b - self.a;
-        let edge2 = self.c - self.b;
-        let edge3 = self.a - self.c;
-        let normal = edge1.cross(edge2).normalize();
-        let plane_d = normal.dot(self.a - Point3::origin());
-        let dist = -(normal.dot(r.origin - Point3::origin()) + plane_d) / normal.dot(r.direction);
-        
-        let pos = r.origin + r.direction * dist;
-        let c1 = pos + (self.a - Point3::origin());
-        let c2 = pos + (self.b - Point3::origin());
-        let c3 = pos + (self.c - Point3::origin());
+        let v0 = self.a;
+        let v1 = self.b;
+        let v2 = self.c;
 
-        if normal.dot(edge1.cross(c1 - Point3::origin())) > 0.0 &&
-           normal.dot(edge2.cross(c2 - Point3::origin())) > 0.0 &&
-           normal.dot(edge3.cross(c3 - Point3::origin())) > 0.0 {
-            println!("{:?}  {:?}  {:?}", c1, c2, c3);
+        let edge1 = v1 - v0;
+        let edge2 = v2 - v0;
 
+        let h = r.direction.cross(edge2);
+        let a = edge1.dot(h);
+
+        let epsilon = 0.0000001;
+        if a > -epsilon && a < epsilon {
+            // This ray is parallel to the triangle.
+            return None;
+        }
+
+        let f = 1.0 / a;
+        let s = r.origin - v0;
+        let u = f * s.dot(h);
+
+        if u < 0.0 || u > 1.0 {
+            return None;
+        }
+
+        let q = s.cross(edge1);
+        let v = f * r.direction.dot(q);
+
+        if v < 0.0 || u + v > 1.0 {
+            return None;
+        }
+
+        let dist = f * edge2.dot(q);
+        if dist > epsilon {
+            // Ray intersection
             Some(Intersection {
-                pos,
+                pos: r.origin + r.direction * dist,
                 dist,
-                normal: normal.normalize(),
-                color: Vector3::new(0.7, 0.1, 0.1),
+                normal: edge2.cross(edge1),
+                color: Vector3::new(1.0, 0.0, 0.0),
             })
         } else {
-            println!("{:?}  {:?}  {:?}", c1, c2, c3);
+            // Line intersection only
             None
         }
     }
@@ -347,13 +365,6 @@ fn main() {
         look_at: Point3::new(0.0, 0.0, -5.0),
 
         spheres: vec![
-            /*
-            Sphere {
-                center: Point3::new(0.0, 0.0, -5.0),
-                radius: 0.5,
-                color: Vector3::new(0.7, 0.3, 0.3),
-            },
-            */
             Sphere {
                 center: Point3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
@@ -362,13 +373,13 @@ fn main() {
         ],
         triangles: vec![
             Triangle {
-                a: Point3::new(10.0, 10.0, -5.0),
-                b: Point3::new(0.0, 10.0, -5.0),
-                c: Point3::new(10.0, 0.0, -5.0),
+                a: Point3::new(0.0, 1.0, -4.0),
+                b: Point3::new(-1.0, 0.0, -5.0),
+                c: Point3::new(1.0, 0.0, -5.0),
             },
         ],
     };
 
-    let mut renderer = Renderer::new(192, 108, 2, world);
+    let mut renderer = Renderer::new(1920, 1080, 2, world);
     renderer.render(&Path::new("rays.png"));
 }
