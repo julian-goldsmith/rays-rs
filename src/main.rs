@@ -53,6 +53,45 @@ pub trait Intersect {
 }
 
 #[derive(Copy, Clone, Debug)]
+pub struct Triangle {
+    pub a: Point3<f32>,
+    pub b: Point3<f32>,
+    pub c: Point3<f32>,
+}
+
+impl Intersect for Triangle {
+    fn intersect(&self, r: &Ray) -> Option<Intersection> {
+        let edge1 = self.b - self.a;
+        let edge2 = self.c - self.b;
+        let edge3 = self.a - self.c;
+        let normal = edge1.cross(edge2).normalize();
+        let plane_d = normal.dot(self.a - Point3::origin());
+        let dist = -(normal.dot(r.origin - Point3::origin()) + plane_d) / normal.dot(r.direction);
+        
+        let pos = r.origin + r.direction * dist;
+        let c1 = pos + (self.a - Point3::origin());
+        let c2 = pos + (self.b - Point3::origin());
+        let c3 = pos + (self.c - Point3::origin());
+
+        if normal.dot(edge1.cross(c1 - Point3::origin())) > 0.0 &&
+           normal.dot(edge2.cross(c2 - Point3::origin())) > 0.0 &&
+           normal.dot(edge3.cross(c3 - Point3::origin())) > 0.0 {
+            println!("{:?}  {:?}  {:?}", c1, c2, c3);
+
+            Some(Intersection {
+                pos,
+                dist,
+                normal: normal.normalize(),
+                color: Vector3::new(0.7, 0.1, 0.1),
+            })
+        } else {
+            println!("{:?}  {:?}  {:?}", c1, c2, c3);
+            None
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub struct Sphere {
     pub center: Point3<f32>,
     pub radius: f32,
@@ -96,6 +135,7 @@ pub struct World {
     pub look_at: Point3<f32>,
 
     pub spheres: Vec<Sphere>,
+    pub triangles: Vec<Triangle>,
 }
 
 impl World {
@@ -106,8 +146,9 @@ impl World {
             return Vector3::new(1.0, 0.0, 0.0);
         };
 
-        let curr_ixn = self.spheres.iter().
-            filter_map(|s| s.intersect(&r)).
+        let curr_ixn = self.spheres.iter().map(|s| s as &Intersect).
+            chain(self.triangles.iter().map(|t| t as &Intersect)).
+            filter_map(|i| i.intersect(&r)).
             min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
 
         match curr_ixn {
@@ -306,19 +347,28 @@ fn main() {
         look_at: Point3::new(0.0, 0.0, -5.0),
 
         spheres: vec![
+            /*
             Sphere {
                 center: Point3::new(0.0, 0.0, -5.0),
                 radius: 0.5,
                 color: Vector3::new(0.7, 0.3, 0.3),
             },
+            */
             Sphere {
                 center: Point3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
                 color: Vector3::new(0.1, 0.1, 0.9),
             },
         ],
+        triangles: vec![
+            Triangle {
+                a: Point3::new(10.0, 10.0, -5.0),
+                b: Point3::new(0.0, 10.0, -5.0),
+                c: Point3::new(10.0, 0.0, -5.0),
+            },
+        ],
     };
 
-    let mut renderer = Renderer::new(1920, 1080, 16, world);
+    let mut renderer = Renderer::new(192, 108, 2, world);
     renderer.render(&Path::new("rays.png"));
 }
