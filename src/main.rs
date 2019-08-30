@@ -2,6 +2,7 @@ extern crate cgmath;
 extern crate png;
 extern crate rand;
 extern crate rand_distr;
+extern crate stl;
 
 use std::borrow::Borrow;
 use std::fs::File;
@@ -57,6 +58,7 @@ pub struct Triangle {
     pub a: Point3<f32>,
     pub b: Point3<f32>,
     pub c: Point3<f32>,
+    pub normal: Vector3<f32>,
 }
 
 impl Intersect for Triangle {
@@ -99,7 +101,7 @@ impl Intersect for Triangle {
             Some(Intersection {
                 pos: r.origin + r.direction * dist,
                 dist,
-                normal: edge2.cross(edge1),
+                normal: self.normal,
                 color: Vector3::new(1.0, 0.0, 0.0),
             })
         } else {
@@ -164,8 +166,8 @@ impl World {
             return Vector3::new(1.0, 0.0, 0.0);
         };
 
-        let curr_ixn = self.spheres.iter().map(|s| s as &Intersect).
-            chain(self.triangles.iter().map(|t| t as &Intersect)).
+        let curr_ixn = self.spheres.iter().map(|s| s as &dyn Intersect).
+            chain(self.triangles.iter().map(|t| t as &dyn Intersect)).
             filter_map(|i| i.intersect(&r)).
             min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
 
@@ -360,6 +362,17 @@ impl Renderer {
 }
 
 fn main() {
+    let mut stl_file = File::open("cube.stl").expect("Couldn't open STL file");
+    let stl = stl::read_stl(&mut stl_file).expect("Couldn't read STL file.");
+    let triangles = stl.triangles.iter().
+        map(|t| Triangle {
+            a: t.v1.into(),
+            b: t.v2.into(),
+            c: t.v3.into(),
+            normal: t.normal.into(),
+        }).
+        collect::<Vec<Triangle>>();
+
     let world = World {
         origin: Point3::new(0.0, 0.0, 3.0),                                                                     // FIXME: Origin doesn't work properly (currently, it's flipped in Z).
         look_at: Point3::new(0.0, 0.0, -5.0),
@@ -371,6 +384,8 @@ fn main() {
                 color: Vector3::new(0.1, 0.1, 0.9),
             },
         ],
+        triangles,
+        /*
         triangles: vec![
             Triangle {
                 a: Point3::new(0.0, 1.0, -4.0),
@@ -378,6 +393,7 @@ fn main() {
                 c: Point3::new(1.0, 0.0, -5.0),
             },
         ],
+        */
     };
 
     let mut renderer = Renderer::new(1920, 1080, 2, world);
