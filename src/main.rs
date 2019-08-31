@@ -55,24 +55,36 @@ pub trait Intersect {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Triangle {
-    pub a: Point3<f32>,
-    pub b: Point3<f32>,
-    pub c: Point3<f32>,
+    pub v0: Point3<f32>,
+    pub v1: Point3<f32>,
+    pub v2: Point3<f32>,
+    pub edge0: Vector3<f32>,
+    pub edge1: Vector3<f32>,
+    pub edge2: Vector3<f32>,
     pub normal: Vector3<f32>,
+    pub color: Vector3<f32>,
+}
+
+impl Triangle {
+    pub fn new(v0: Point3<f32>, v1: Point3<f32>, v2: Point3<f32>, normal: Vector3<f32>, color: Vector3<f32>) -> Triangle {
+        Triangle {
+            v0,
+            v1,
+            v2,
+            edge0: v1 - v0,
+            edge1: v2 - v0,
+            edge2: v2 - v1,
+            normal,
+            color,
+        }
+    }
 }
 
 impl Intersect for Triangle {
     // http://www.lighthouse3d.com/tutorials/maths/ray-triangle-intersection/
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
-        let v0 = self.a;
-        let v1 = self.b;
-        let v2 = self.c;
-
-        let edge1 = v1 - v0;
-        let edge2 = v2 - v0;
-
-        let h = r.direction.cross(edge2);
-        let a = edge1.dot(h);
+        let h = r.direction.cross(self.edge1);
+        let a = self.edge0.dot(h);
 
         let epsilon = 0.0000001;
         if a > -epsilon && a < epsilon {
@@ -81,28 +93,28 @@ impl Intersect for Triangle {
         }
 
         let f = 1.0 / a;
-        let s = r.origin - v0;
+        let s = r.origin - self.v0;
         let u = f * s.dot(h);
 
         if u < 0.0 || u > 1.0 {
             return None;
         }
 
-        let q = s.cross(edge1);
+        let q = s.cross(self.edge0);
         let v = f * r.direction.dot(q);
 
         if v < 0.0 || u + v > 1.0 {
             return None;
         }
 
-        let dist = f * edge2.dot(q);
+        let dist = f * self.edge1.dot(q);
         if dist > epsilon {
             // Ray intersection
             Some(Intersection {
                 pos: r.origin + r.direction * dist,
                 dist,
                 normal: self.normal,
-                color: Vector3::new(1.0, 0.0, 0.0),
+                color: self.color,
             })
         } else {
             // Line intersection only
@@ -362,15 +374,10 @@ impl Renderer {
 }
 
 fn main() {
-    let mut stl_file = File::open("cube.stl").expect("Couldn't open STL file");
+    let mut stl_file = File::open("monkey.stl").expect("Couldn't open STL file");
     let stl = stl::read_stl(&mut stl_file).expect("Couldn't read STL file.");
     let triangles = stl.triangles.iter().
-        map(|t| Triangle {
-            a: t.v1.into(),
-            b: t.v2.into(),
-            c: t.v3.into(),
-            normal: t.normal.into(),
-        }).
+        map(|t| Triangle::new(t.v1.into(), t.v2.into(), t.v3.into(), t.normal.into(), Vector3::new(0.7, 0.3, 0.6))).
         collect::<Vec<Triangle>>();
 
     let world = World {
@@ -385,17 +392,8 @@ fn main() {
             },
         ],
         triangles,
-        /*
-        triangles: vec![
-            Triangle {
-                a: Point3::new(0.0, 1.0, -4.0),
-                b: Point3::new(-1.0, 0.0, -5.0),
-                c: Point3::new(1.0, 0.0, -5.0),
-            },
-        ],
-        */
     };
 
-    let mut renderer = Renderer::new(1920, 1080, 2, world);
+    let mut renderer = Renderer::new(800, 450, 1, world);
     renderer.render(&Path::new("rays.png"));
 }
