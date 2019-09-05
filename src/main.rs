@@ -41,6 +41,39 @@ impl Ray {
     }
 }
 
+// Axis-aligned bounding box.  Far point is origin + extents.  All extents must be positive.
+#[derive(Copy, Clone, Debug)]
+pub struct Bbox {
+    pub origin: Point3<f32>,
+    pub extents: Vector3<f32>,
+}
+
+impl Bbox {
+    pub fn new(origin: Point3<f32>, edge_len: f32) -> Bbox {
+        Bbox {
+            origin,
+            extents: Vector3::new(edge_len, edge_len, edge_len),
+        }
+    }
+
+    pub fn contains(&self, p: Point3<f32>) -> bool {
+        p.x >= self.origin.x &&
+        p.x <= self.origin.x + self.extents.x &&
+        p.y >= self.origin.y &&
+        p.y <= self.origin.y + self.extents.y &&
+        p.z <= self.origin.z &&
+        p.z >= self.origin.z - self.extents.z
+    }
+
+    pub fn intersect_bbox(&self, other: &Bbox) -> bool {
+        assert!(self.extents.x >= 0.0 && self.extents.y >= 0.0 && self.extents.z >= 0.0);
+        assert!(other.extents.x >= 0.0 && other.extents.y >= 0.0 && other.extents.z >= 0.0);
+
+        self.contains(other.origin) || other.contains(self.origin) ||
+        self.contains(other.origin + other.extents) || other.contains(self.origin + self.extents)
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct Intersection {
     pub pos: Point3<f32>,
@@ -50,7 +83,8 @@ pub struct Intersection {
 }
 
 pub trait Intersect {
-    fn intersect(&self, r: &Ray) -> Option<Intersection>;
+    fn intersect_ray(&self, r: &Ray) -> Option<Intersection>;
+    fn intersect_bbox(&self, bbox: &Bbox) -> bool;
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -82,7 +116,7 @@ impl Triangle {
 
 impl Intersect for Triangle {
     // http://www.lighthouse3d.com/tutorials/maths/ray-triangle-intersection/
-    fn intersect(&self, r: &Ray) -> Option<Intersection> {
+    fn intersect_ray(&self, r: &Ray) -> Option<Intersection> {
         let h = r.direction.cross(self.edge1);
         let a = self.edge0.dot(h);
 
@@ -121,6 +155,76 @@ impl Intersect for Triangle {
             None
         }
     }
+
+    fn intersect_bbox(&self, bbox: &Bbox) -> bool {
+        let a = self.v0;
+        let b = self.v1;
+        let c = self.v2;
+
+        let min_x = {
+            if a.x < b.x && a.x < c.x {
+                a.x
+            } else if b.x < a.x && b.x < c.x {
+                b.x
+            } else {
+                c.x
+            }
+        };
+        let max_x = {
+            if a.x > b.x && a.x > c.x {
+                a.x
+            } else if b.x > a.x && b.x > c.x {
+                b.x
+            } else {
+                c.x
+            }
+        };
+
+        let min_y = {
+            if a.y < b.y && a.y < c.y {
+                a.y
+            } else if b.y < a.y && b.y < c.y {
+                b.y
+            } else {
+                c.y
+            }
+        };
+        let max_y = {
+            if a.y > b.y && a.y > c.y {
+                a.y
+            } else if b.y > a.y && b.y > c.y {
+                b.y
+            } else {
+                c.y
+            }
+        };
+
+        let min_z = {
+            if a.z < b.z && a.z < c.z {
+                a.z
+            } else if b.z < a.z && b.z < c.z {
+                b.z
+            } else {
+                c.z
+            }
+        };
+        let max_z = {
+            if a.z > b.z && a.z > c.z {
+                a.z
+            } else if b.z > a.z && b.z > c.z {
+                b.z
+            } else {
+                c.z
+            }
+        };
+
+        let tribox = Bbox {
+            origin: Point3::new(min_x, min_y, min_z),
+            extents: Vector3::new(max_x, max_y, max_z),
+        };
+
+        bbox.intersect_bbox(&tribox)
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -131,7 +235,7 @@ pub struct Sphere {
 }
 
 impl Intersect for Sphere {
-    fn intersect(&self, r: &Ray) -> Option<Intersection> {
+    fn intersect_ray(&self, r: &Ray) -> Option<Intersection> {
         let oc = r.origin - self.center;
         let b = -oc.dot(r.direction);
         let discriminant = b * b + self.radius * self.radius - oc.magnitude2();
@@ -159,6 +263,10 @@ impl Intersect for Sphere {
             None
         }
     }
+
+    fn intersect_bbox(&self, _bbox: &Bbox) -> bool {
+        unimplemented!()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -180,7 +288,7 @@ impl World {
 
         let curr_ixn = self.spheres.iter().map(|s| s as &dyn Intersect).
             chain(self.triangles.iter().map(|t| t as &dyn Intersect)).
-            filter_map(|i| i.intersect(&r)).
+            filter_map(|i| i.intersect_ray(&r)).
             min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
 
         match curr_ixn {
