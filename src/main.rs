@@ -61,14 +61,15 @@ impl Bbox {
         p.x <= self.origin.x + self.extents.x &&
         p.y >= self.origin.y &&
         p.y <= self.origin.y + self.extents.y &&
-        p.z <= self.origin.z &&
-        p.z >= self.origin.z - self.extents.z
+        p.z >= self.origin.z &&
+        p.z <= self.origin.z + self.extents.z
     }
 
     pub fn intersect_bbox(&self, other: &Bbox) -> bool {
         assert!(self.extents.x >= 0.0 && self.extents.y >= 0.0 && self.extents.z >= 0.0);
         assert!(other.extents.x >= 0.0 && other.extents.y >= 0.0 && other.extents.z >= 0.0);
 
+        // FIXME: This doesn't quite work.  Test on edges?
         self.contains(other.origin) || other.contains(self.origin) ||
         self.contains(other.origin + other.extents) || other.contains(self.origin + self.extents)
     }
@@ -97,10 +98,75 @@ pub struct Triangle {
     pub edge2: Vector3<f32>,
     pub normal: Vector3<f32>,
     pub color: Vector3<f32>,
+    pub bbox: Bbox,
 }
 
 impl Triangle {
     pub fn new(v0: Point3<f32>, v1: Point3<f32>, v2: Point3<f32>, normal: Vector3<f32>, color: Vector3<f32>) -> Triangle {
+        let min_x = {
+            if v0.x < v1.x && v0.x < v2.x {
+                v0.x
+            } else if v1.x < v0.x && v1.x < v2.x {
+                v1.x
+            } else {
+                v2.x
+            }
+        };
+        let max_x = {
+            if v0.x > v1.x && v0.x > v2.x {
+                v0.x
+            } else if v1.x > v0.x && v1.x > v2.x {
+                v1.x
+            } else {
+                v2.x
+            }
+        };
+
+        let min_y = {
+            if v0.y < v1.y && v0.y < v2.y {
+                v0.y
+            } else if v1.y < v0.y && v1.y < v2.y {
+                v1.y
+            } else {
+                v2.y
+            }
+        };
+        let max_y = {
+            if v0.y > v1.y && v0.y > v2.y {
+                v0.y
+            } else if v1.y > v0.y && v1.y > v2.y {
+                v1.y
+            } else {
+                v2.y
+            }
+        };
+
+        let min_z = {
+            if v0.z < v1.z && v0.z < v2.z {
+                v0.z
+            } else if v1.z < v0.z && v1.z < v2.z {
+                v1.z
+            } else {
+                v2.z
+            }
+        };
+        let max_z = {
+            if v0.z > v1.z && v0.z > v2.z {
+                v0.z
+            } else if v1.z > v0.z && v1.z > v2.z {
+                v1.z
+            } else {
+                v2.z
+            }
+        };
+
+        let bbox = Bbox {
+            origin: Point3::new(min_x, min_y, min_z),
+            extents: Vector3::new(max_x - min_x, max_y - min_y, max_z - min_z),
+        };
+
+        println!("v0: {:?}, v1: {:?}, v2: {:?}, tribox: {:?}", v0, v1, v2, bbox);
+
         Triangle {
             v0,
             v1,
@@ -110,6 +176,7 @@ impl Triangle {
             edge2: v2 - v1,
             normal,
             color,
+            bbox,
         }
     }
 }
@@ -157,73 +224,7 @@ impl Intersect for Triangle {
     }
 
     fn intersect_bbox(&self, bbox: &Bbox) -> bool {
-        let a = self.v0;
-        let b = self.v1;
-        let c = self.v2;
-
-        let min_x = {
-            if a.x < b.x && a.x < c.x {
-                a.x
-            } else if b.x < a.x && b.x < c.x {
-                b.x
-            } else {
-                c.x
-            }
-        };
-        let max_x = {
-            if a.x > b.x && a.x > c.x {
-                a.x
-            } else if b.x > a.x && b.x > c.x {
-                b.x
-            } else {
-                c.x
-            }
-        };
-
-        let min_y = {
-            if a.y < b.y && a.y < c.y {
-                a.y
-            } else if b.y < a.y && b.y < c.y {
-                b.y
-            } else {
-                c.y
-            }
-        };
-        let max_y = {
-            if a.y > b.y && a.y > c.y {
-                a.y
-            } else if b.y > a.y && b.y > c.y {
-                b.y
-            } else {
-                c.y
-            }
-        };
-
-        let min_z = {
-            if a.z < b.z && a.z < c.z {
-                a.z
-            } else if b.z < a.z && b.z < c.z {
-                b.z
-            } else {
-                c.z
-            }
-        };
-        let max_z = {
-            if a.z > b.z && a.z > c.z {
-                a.z
-            } else if b.z > a.z && b.z > c.z {
-                b.z
-            } else {
-                c.z
-            }
-        };
-
-        let tribox = Bbox {
-            origin: Point3::new(min_x, min_y, min_z),
-            extents: Vector3::new(max_x, max_y, max_z),
-        };
-
-        bbox.intersect_bbox(&tribox)
+        bbox.intersect_bbox(&self.bbox)
     }
 }
 
@@ -264,8 +265,14 @@ impl Intersect for Sphere {
         }
     }
 
-    fn intersect_bbox(&self, _bbox: &Bbox) -> bool {
-        unimplemented!()
+    fn intersect_bbox(&self, bbox: &Bbox) -> bool {
+        let hextents = Vector3::new(self.radius, self.radius, self.radius);
+        let sbox = Bbox {
+            origin: self.center - hextents,
+            extents: hextents * 2.0,
+        };
+
+        bbox.intersect_bbox(&sbox)
     }
 }
 
@@ -286,9 +293,14 @@ impl World {
             return Vector3::new(1.0, 0.0, 0.0);
         };
 
+        let test_bbox = Bbox {
+            origin: Point3::new(-100.0, -100.0, -200.0),
+            extents: Vector3::new(200.0, 200.0, 200.0),
+        };
+
         let curr_ixn = self.spheres.iter().map(|s| s as &dyn Intersect).
             chain(self.triangles.iter().map(|t| t as &dyn Intersect)).
-            filter_map(|i| i.intersect_ray(&r)).
+            filter_map(|i| if i.intersect_bbox(&test_bbox) { i.intersect_ray(&r) } else { None }).
             min_by(|a, b| a.dist.partial_cmp(&b.dist).unwrap());
 
         match curr_ixn {
